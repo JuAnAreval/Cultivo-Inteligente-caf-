@@ -2,6 +2,7 @@ import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/finca_service.dart';
 import 'package:app_flutter_ai/core/services/session_service.dart';
 import 'package:app_flutter_ai/screens/farms/add_farm_screen.dart';
+import 'package:app_flutter_ai/screens/lots/lot_list_screen.dart';
 import 'package:flutter/material.dart';
 
 class FarmListScreen extends StatefulWidget {
@@ -160,7 +161,27 @@ class _FarmListScreenState extends State<FarmListScreen> {
               itemCount: farms.length,
               itemBuilder: (context, index) {
                 final farm = farms[index];
-                return _FarmCard(farm: farm);
+                return _FarmCard(
+                  farm: farm,
+                  onTap: () {
+                    final farmId = (farm['id'] ?? '').toString();
+                    final farmName = (farm['nombre'] ?? 'Finca').toString();
+
+                    if (farmId.isEmpty) {
+                      return;
+                    }
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LotListScreen(
+                          farmId: farmId,
+                          farmName: farmName,
+                        ),
+                      ),
+                    );
+                  },
+                );
               },
             ),
           );
@@ -177,9 +198,13 @@ class _FarmListScreenState extends State<FarmListScreen> {
 }
 
 class _FarmCard extends StatelessWidget {
-  const _FarmCard({required this.farm});
+  const _FarmCard({
+    required this.farm,
+    required this.onTap,
+  });
 
   final Map<String, dynamic> farm;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -189,53 +214,78 @@ class _FarmCard extends StatelessWidget {
     final latitud = (farm['latitud'] ?? '').toString();
     final longitud = (farm['longitud'] ?? '').toString();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            nombre.isEmpty ? 'Finca sin nombre' : nombre,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: AppColors.sand),
           ),
-          const SizedBox(height: 8),
-          Text(
-            ubicacion.isEmpty ? 'Sin ubicacion registrada' : ubicacion,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _FarmChip(
-                icon: Icons.crop_landscape_rounded,
-                text: area.isEmpty ? 'Area no definida' : '$area ha',
+              Text(
+                nombre.isEmpty ? 'Finca sin nombre' : nombre,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
               ),
-              _FarmChip(
-                icon: Icons.my_location_rounded,
-                text: latitud.isEmpty ? 'Sin latitud' : latitud,
+              const SizedBox(height: 8),
+              Text(
+                ubicacion.isEmpty ? 'Sin ubicacion registrada' : ubicacion,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
               ),
-              _FarmChip(
-                icon: Icons.explore_rounded,
-                text: longitud.isEmpty ? 'Sin longitud' : longitud,
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _FarmChip(
+                    icon: Icons.crop_landscape_rounded,
+                    text: area.isEmpty ? 'Area no definida' : '$area ha',
+                  ),
+                  _FarmChip(
+                    icon: Icons.my_location_rounded,
+                    text: latitud.isEmpty ? 'Sin latitud' : latitud,
+                  ),
+                  _FarmChip(
+                    icon: Icons.explore_rounded,
+                    text: longitud.isEmpty ? 'Sin longitud' : longitud,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Row(
+                children: [
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: AppColors.moss,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Ver lotes de esta finca',
+                    style: TextStyle(
+                      color: AppColors.moss,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

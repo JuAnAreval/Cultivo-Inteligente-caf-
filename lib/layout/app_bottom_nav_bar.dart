@@ -26,20 +26,20 @@ class AppBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.soil,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x22000000),
-                blurRadius: 30,
-                offset: Offset(0, 18),
-              ),
-            ],
-          ),
+      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.soil,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x333E2F25),
+              blurRadius: 24,
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
         child: Row(
           children: [
             for (var index = 0; index < items.length; index++)
@@ -72,21 +72,28 @@ class _BottomNavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(24),
+      splashColor: AppColors.clay.withValues(alpha: 0.2),
+      highlightColor: Colors.transparent,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.clayStrong : Colors.transparent,
-          borderRadius: BorderRadius.circular(22),
+          color: selected ? AppColors.clay : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              item.icon,
-              color: selected ? AppColors.surface : AppColors.sand,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: Icon(
+                item.icon,
+                key: ValueKey(selected),
+                color: selected ? AppColors.surface : AppColors.sand,
+                size: selected ? 26 : 24,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -96,7 +103,8 @@ class _BottomNavButton extends StatelessWidget {
               style: TextStyle(
                 color: selected ? AppColors.surface : AppColors.sand,
                 fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                letterSpacing: selected ? 0.2 : 0,
               ),
             ),
           ],

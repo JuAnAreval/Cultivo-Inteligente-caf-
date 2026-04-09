@@ -1,5 +1,6 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/layout/app_bottom_nav_bar.dart';
+import 'package:app_flutter_ai/screens/farms/farm_map_screen.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,15 +30,15 @@ class _HomeScreenState extends State<HomeScreen> {
             colors: [
               AppColors.background,
               AppColors.backgroundSoft,
-              AppColors.sand,
+              AppColors.surfaceMuted,
             ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 110),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
             child: _buildTab(),
           ),
         ),
@@ -96,11 +97,18 @@ class _HomeMenuTab extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.sand),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: AppColors.surfaceMuted, width: 1.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A3E2F25),
+                blurRadius: 20,
+                offset: Offset(0, 8),
+              ),
+            ],
           ),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,16 +116,17 @@ class _HomeMenuTab extends StatelessWidget {
               Text(
                 'Inicio',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 32,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
                 ),
               ),
-              SizedBox(height: 6),
+              SizedBox(height: 8),
               Text(
                 'Selecciona un modulo para continuar.',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   color: AppColors.textSecondary,
                   height: 1.45,
                 ),
@@ -125,38 +134,32 @@ class _HomeMenuTab extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
         Expanded(
           child: GridView.count(
             crossAxisCount: 2,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            childAspectRatio: 0.82,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.76,
+            physics: const BouncingScrollPhysics(),
             children: [
               _MenuCard(
-                title: 'Acceder a mapa',
-                subtitle: 'Visualiza zonas, lotes y ubicaciones',
+                title: 'Gestiona fincas',
+                subtitle: 'Consulta tus fincas y agrega nuevos registros',
+                icon: Icons.home_work_rounded,
+                onTap: () => Navigator.pushNamed(context, '/farms'),
+              ),
+              _MenuCard(
+                title: 'Mapa de fincas',
+                subtitle: 'Explora visualmente todas tus fincas en el mapa',
                 icon: Icons.map_rounded,
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const PlaceholderFeatureScreen(
-                        title: 'Mapa',
-                        subtitle:
-                            'Esta pantalla queda lista para tu modulo de mapas.',
-                        icon: Icons.map_rounded,
-                      ),
+                      builder: (_) => const FarmMapScreen(),
                     ),
                   );
-                },
-              ),
-              _MenuCard(
-                title: 'Gestiona fincas',
-                subtitle: 'Consulta tus fincas y agrega nuevos registros',
-                icon: Icons.home_work_rounded,
-                onTap: () {
-                  Navigator.pushNamed(context, '/farms');
                 },
               ),
               _MenuCard(
@@ -190,17 +193,19 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(28),
+      splashColor: AppColors.sand.withValues(alpha: 0.3),
+      highlightColor: Colors.transparent,
       child: Ink(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.sand),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.surfaceMuted, width: 1.5),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x145F4C3F),
-              blurRadius: 18,
+              color: Color(0x0A3E2F25),
+              blurRadius: 20,
               offset: Offset(0, 10),
             ),
           ],
@@ -209,23 +214,24 @@ class _MenuCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.backgroundSoft,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(icon, color: AppColors.moss, size: 22),
+              child: Icon(icon, color: AppColors.clayStrong, size: 24),
             ),
-            const Spacer(),
+            const SizedBox(height: 18),
             Text(
               title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 17,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
                 height: 1.15,
                 color: AppColors.textPrimary,
+                letterSpacing: -0.3,
               ),
             ),
             const SizedBox(height: 8),
@@ -235,10 +241,11 @@ class _MenuCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 13,
-                height: 1.35,
+                height: 1.4,
                 color: AppColors.textSecondary,
               ),
             ),
+            const Spacer(),
           ],
         ),
       ),
@@ -265,33 +272,41 @@ class _PlaceholderTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.surfaceMuted, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A3E2F25),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppColors.backgroundSoft,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(icon, color: AppColors.moss),
+            child: Icon(icon, color: AppColors.clayStrong, size: 28),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             title,
             style: const TextStyle(
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: FontWeight.w800,
               color: AppColors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             subtitle,
             style: const TextStyle(
@@ -301,86 +316,31 @@ class _PlaceholderTab extends StatelessWidget {
             ),
           ),
           if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 22),
-            FilledButton(
-              onPressed: onAction,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.moss,
-                foregroundColor: AppColors.surface,
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: FilledButton(
+                onPressed: onAction,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.clayStrong,
+                  foregroundColor: AppColors.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  actionLabel!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              child: Text(actionLabel!),
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class PlaceholderFeatureScreen extends StatelessWidget {
-  const PlaceholderFeatureScreen({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.sand),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundSoft,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: AppColors.moss),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 16,
-                  height: 1.55,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

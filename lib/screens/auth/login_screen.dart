@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/auth_service.dart';
+import 'package:app_flutter_ai/core/services/sync_service.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -37,6 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (response['success'] == true) {
+        await SyncService.syncAll();
         _showSnackBar('Ingreso exitoso.', AppColors.success);
         Navigator.pushReplacementNamed(context, '/home');
         return;
@@ -64,9 +68,16 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: const EdgeInsets.all(20),
       ),
     );
   }
@@ -80,166 +91,179 @@ class _LoginScreenState extends State<LoginScreen> {
             colors: [
               AppColors.background,
               AppColors.backgroundSoft,
-              AppColors.sand,
+              AppColors.surfaceMuted,
             ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: Stack(
           children: [
             Positioned(
-              top: 30,
-              left: -50,
+              top: 50,
+              left: -40,
+              child: _Blob(
+                size: 200,
+                color: AppColors.sage.withValues(alpha: 0.3),
+              ),
+            ),
+            Positioned(
+              top: -20,
+              right: -30,
+              child: _Blob(
+                size: 240,
+                color: AppColors.clay.withValues(alpha: 0.2),
+              ),
+            ),
+            Positioned(
+              bottom: 80,
+              left: 20,
               child: _Blob(
                 size: 180,
-                color: AppColors.sage.withValues(alpha: 0.26),
-              ),
-            ),
-            Positioned(
-              top: -40,
-              right: -20,
-              child: _Blob(
-                size: 220,
-                color: AppColors.clay.withValues(alpha: 0.26),
-              ),
-            ),
-            Positioned(
-              bottom: -30,
-              left: 40,
-              child: _Blob(
-                size: 160,
-                color: AppColors.surface.withValues(alpha: 0.7),
+                color: AppColors.sand.withValues(alpha: 0.4),
               ),
             ),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
+                  physics: const BouncingScrollPhysics(),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 540),
-                    child: Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: AppColors.sand,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x1F5F4C3F),
-                            blurRadius: 28,
-                            offset: Offset(0, 20),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(32),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                              color: AppColors.surface.withValues(alpha: 0.6),
+                              width: 1.5,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppColors.soil,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: const Text(
-                              'App de campo',
-                              style: TextStyle(
-                                color: AppColors.surface,
-                                fontWeight: FontWeight.w700,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x0A3E2F25),
+                                blurRadius: 30,
+                                offset: Offset(0, 15),
                               ),
-                            ),
+                            ],
                           ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Organiza tu jornada en terreno',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              height: 1.08,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Ingresa para ver el resumen del dia, tus accesos principales y el asistente IA local para registrar actividades del campo.',
-                            style: TextStyle(
-                              fontSize: 16,
-                              height: 1.55,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          const _FeatureRow(),
-                          const SizedBox(height: 26),
-                          _InputField(
-                            controller: _emailController,
-                            label: 'Correo electronico',
-                            hint: 'tu@empresa.com',
-                            icon: Icons.alternate_email_rounded,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 16),
-                          _InputField(
-                            controller: _passwordController,
-                            label: 'Contrasena',
-                            hint: 'Escribe tu contrasena',
-                            icon: Icons.lock_outline_rounded,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _login(),
-                            suffixIcon: IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_rounded
-                                    : Icons.visibility_rounded,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: _isLoading ? null : _login,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.moss,
-                                foregroundColor: AppColors.surface,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 18),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.clay.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: const Text(
+                                  'App de campo',
+                                  style: TextStyle(
+                                    color: AppColors.clayStrong,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
                                 ),
                               ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.2,
-                                        color: AppColors.surface,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Entrar al inicio',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'Bienvenido',
+                                style: TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.1,
+                                  letterSpacing: -0.8,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Inicia sesion para continuar.',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 36),
+                              _InputField(
+                                controller: _emailController,
+                                label: 'Correo electronico',
+                                hint: 'tu@empresa.com',
+                                icon: Icons.alternate_email_rounded,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                              ),
+                              const SizedBox(height: 20),
+                              _InputField(
+                                controller: _passwordController,
+                                label: 'Contrasena',
+                                hint: 'Escribe tu contrasena',
+                                icon: Icons.lock_outline_rounded,
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _login(),
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                  splashRadius: 24,
+                                  icon: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off_rounded
+                                          : Icons.visibility_rounded,
+                                      key: ValueKey(_obscurePassword),
+                                      color: AppColors.textSecondary,
                                     ),
-                            ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 32),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: FilledButton(
+                                  onPressed: _isLoading ? null : _login,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.clayStrong,
+                                    foregroundColor: AppColors.surface,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: AppColors.surface,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Entrar al inicio',
+                                          style: TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -284,6 +308,7 @@ class _InputField extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
+            fontSize: 14,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
           ),
@@ -295,62 +320,31 @@ class _InputField extends StatelessWidget {
           textInputAction: textInputAction,
           obscureText: obscureText,
           onSubmitted: onSubmitted,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: AppColors.textSecondary),
-            prefixIcon: Icon(icon, color: AppColors.textSecondary),
+            hintStyle: TextStyle(
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w400,
+            ),
+            prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 22),
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: AppColors.surfaceMuted,
+            fillColor: AppColors.background.withValues(alpha: 0.7),
             contentPadding: const EdgeInsets.symmetric(vertical: 18),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
               borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20),
+              borderSide: const BorderSide(color: AppColors.clay, width: 1.5),
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _FeatureRow extends StatelessWidget {
-  const _FeatureRow();
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      ('Campo', Icons.agriculture_rounded),
-      ('IA local', Icons.memory_rounded),
-      ('Registro diario', Icons.event_note_rounded),
-    ];
-
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        for (final item in items)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceMuted,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(item.$2, size: 18, color: AppColors.moss),
-                const SizedBox(width: 8),
-                Text(
-                  item.$1,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -372,7 +366,7 @@ class _Blob extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(size * 0.36),
+        borderRadius: BorderRadius.circular(size * 0.4),
       ),
     );
   }
