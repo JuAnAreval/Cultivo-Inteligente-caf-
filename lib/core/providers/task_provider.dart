@@ -1,5 +1,5 @@
 import 'package:app_flutter_ai/core/models/task_model.dart';
-import 'package:app_flutter_ai/core/services/database_helper.dart';
+import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:flutter/material.dart';
 
 class TaskProvider with ChangeNotifier {

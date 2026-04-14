@@ -1,8 +1,8 @@
 import 'dart:ui';
 
 import 'package:app_flutter_ai/core/config/app_colors.dart';
-import 'package:app_flutter_ai/core/services/auth_service.dart';
-import 'package:app_flutter_ai/core/services/sync_service.dart';
+import 'package:app_flutter_ai/core/services/auth/auth_service.dart';
+import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {

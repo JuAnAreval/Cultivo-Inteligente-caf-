@@ -11,6 +11,8 @@ import kotlinx.coroutines.launch
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.appflutterai/llm"
     private var llmInference: LlmInference? = null
+    private var initializedModelPath: String? = null
+    private var isGenerating = false
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -20,14 +22,24 @@ class MainActivity: FlutterActivity() {
                     val modelPath = call.argument<String>("modelPath")
                     if (modelPath != null) {
                         try {
+                            if (llmInference != null && initializedModelPath == modelPath) {
+                                result.success("Initialized")
+                                return@setMethodCallHandler
+                            }
+
+                            llmInference?.close()
+                            llmInference = null
+
                             val options = LlmInference.LlmInferenceOptions.builder()
                                 .setModelPath(modelPath)
                                 .setMaxTopK(40)
-                                .setMaxTokens(4096)
+                                .setMaxTokens(512)
                                 .build()
                             llmInference = LlmInference.createFromOptions(context, options)
+                            initializedModelPath = modelPath
                             result.success("Initialized")
                         } catch (e: Exception) {
+                            initializedModelPath = null
                             result.error("INIT_FAILED", e.message, null)
                         }
                     } else {
@@ -37,14 +49,22 @@ class MainActivity: FlutterActivity() {
                 "generateResponse" -> {
                     val prompt = call.argument<String>("prompt")
                     if (prompt != null && llmInference != null) {
+                        if (isGenerating) {
+                            result.error("BUSY", "LLM is already generating a response", null)
+                            return@setMethodCallHandler
+                        }
+
+                        isGenerating = true
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
                                 val response = llmInference?.generateResponse(prompt)
                                 launch(Dispatchers.Main) {
+                                    isGenerating = false
                                     result.success(response)
                                 }
                             } catch (e: Exception) {
                                 launch(Dispatchers.Main) {
+                                    isGenerating = false
                                     result.error("GENERATE_FAILED", e.message, null)
                                 }
                             }
@@ -58,5 +78,12 @@ class MainActivity: FlutterActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        llmInference?.close()
+        llmInference = null
+        initializedModelPath = null
+        super.onDestroy()
     }
 }

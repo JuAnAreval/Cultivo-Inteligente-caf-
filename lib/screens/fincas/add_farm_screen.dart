@@ -1,11 +1,17 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
-import 'package:app_flutter_ai/core/services/finca_service.dart';
+import 'package:app_flutter_ai/core/services/fincas/device_location_service.dart';
+import 'package:app_flutter_ai/core/services/fincas/finca_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 class AddFarmScreen extends StatefulWidget {
-  const AddFarmScreen({super.key});
+  const AddFarmScreen({
+    super.key,
+    this.existingFarm,
+  });
+
+  final Map<String, dynamic>? existingFarm;
 
   @override
   State<AddFarmScreen> createState() => _AddFarmScreenState();
@@ -23,13 +29,36 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final MapController _mapController = MapController();
 
   bool _isSaving = false;
+  bool _isLocating = false;
   LatLng? _selectedPoint = _defaultCenter;
   double _currentZoom = 6.5;
 
   @override
   void initState() {
     super.initState();
-    _syncCoordinates(_defaultCenter);
+    final existingFarm = widget.existingFarm;
+    if (existingFarm != null) {
+      _nombreController.text = (existingFarm['nombre'] ?? '').toString();
+      _ubicacionController.text =
+          (existingFarm['ubicacion_texto'] ?? '').toString();
+      _areaController.text = (existingFarm['area_hectareas'] ?? '').toString();
+
+      final initialLat = double.tryParse(
+        (existingFarm['latitud'] ?? '').toString().replaceAll(',', '.'),
+      );
+      final initialLng = double.tryParse(
+        (existingFarm['longitud'] ?? '').toString().replaceAll(',', '.'),
+      );
+      final initialPoint = initialLat != null && initialLng != null
+          ? LatLng(initialLat, initialLng)
+          : _defaultCenter;
+      _syncCoordinates(initialPoint);
+      _selectedPoint = initialPoint;
+      _currentZoom = 14;
+    } else {
+      _syncCoordinates(_defaultCenter);
+    }
+
     _nombreController.addListener(_refresh);
     _ubicacionController.addListener(_refresh);
     _areaController.addListener(_refresh);
@@ -66,6 +95,43 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     });
   }
 
+  Future<void> _useCurrentLocation() async {
+    if (_isLocating) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _isLocating = true);
+
+    try {
+      final point = await DeviceLocationService.getCurrentLatLng();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _syncCoordinates(point);
+        _currentZoom = 16;
+      });
+      _mapController.move(point, _currentZoom);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLocating = false);
+      }
+    }
+  }
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) {
@@ -89,16 +155,23 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         ),
       };
 
-      await FincaService.create(payload);
+      final existingId = (widget.existingFarm?['id'] ?? '').toString();
+      if (existingId.isEmpty) {
+        await FincaService.create(payload);
+      } else {
+        await FincaService.update(existingId, payload);
+      }
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Finca creada correctamente.',
+            existingId.isEmpty
+                ? 'Finca creada correctamente.'
+                : 'Finca actualizada correctamente.',
           ),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
@@ -136,7 +209,9 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Registrar finca'),
+        title: Text(
+          widget.existingFarm == null ? 'Registrar finca' : 'Editar finca',
+        ),
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -156,19 +231,19 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: AppColors.sand),
                 ),
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Nueva finca',
-                      style: TextStyle(
+                      widget.existingFarm == null ? 'Nueva finca' : 'Editar finca',
+                      style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Text(
+                    const SizedBox(height: 8),
+                    const Text(
                       'Selecciona la ubicacion directamente en el mapa. La latitud y la longitud se llenan automaticamente al tocar el punto.',
                       style: TextStyle(
                         color: AppColors.textSecondary,
@@ -209,11 +284,40 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isLocating ? null : _useCurrentLocation,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.moss,
+                          side: const BorderSide(color: AppColors.sand),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: _isLocating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.moss,
+                                ),
+                              )
+                            : const Icon(Icons.my_location_rounded),
+                        label: Text(
+                          _isLocating
+                              ? 'Buscando ubicacion...'
+                              : 'Usar ubicacion actual',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _MapPickerCard(
                       selectedPoint: _selectedPoint,
                       currentZoom: _currentZoom,
                       mapController: _mapController,
                       onMapTap: _onMapTap,
+                      onUseCurrentLocation: _useCurrentLocation,
+                      isLocating: _isLocating,
                       onZoomIn: () {
                         setState(() {
                           _currentZoom = (_currentZoom + 1).clamp(3, 18);
@@ -304,7 +408,13 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                           ),
                         )
                       : const Icon(Icons.save_rounded),
-                  label: Text(_isSaving ? 'Guardando...' : 'Guardar finca'),
+                  label: Text(
+                    _isSaving
+                        ? 'Guardando...'
+                        : (widget.existingFarm == null
+                            ? 'Guardar finca'
+                            : 'Actualizar finca'),
+                  ),
                 ),
               ),
             ],
@@ -354,6 +464,8 @@ class _MapPickerCard extends StatelessWidget {
     required this.currentZoom,
     required this.mapController,
     required this.onMapTap,
+    required this.onUseCurrentLocation,
+    required this.isLocating,
     required this.onZoomIn,
     required this.onZoomOut,
   });
@@ -362,6 +474,8 @@ class _MapPickerCard extends StatelessWidget {
   final double currentZoom;
   final MapController mapController;
   final void Function(TapPosition, LatLng) onMapTap;
+  final VoidCallback onUseCurrentLocation;
+  final bool isLocating;
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
 
@@ -421,6 +535,13 @@ class _MapPickerCard extends StatelessWidget {
                   child: Column(
                     children: [
                       _MapButton(
+                        icon: isLocating
+                            ? Icons.more_horiz_rounded
+                            : Icons.my_location_rounded,
+                        onTap: onUseCurrentLocation,
+                      ),
+                      const SizedBox(height: 8),
+                      _MapButton(
                         icon: Icons.add_rounded,
                         onTap: onZoomIn,
                       ),
@@ -446,7 +567,7 @@ class _MapPickerCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Text(
-                      'Toca el mapa para seleccionar la ubicacion de la finca.',
+                      'Toca el mapa o usa tu ubicacion actual para seleccionar el punto.',
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600,

@@ -1,7 +1,7 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/models/task_model.dart';
 import 'package:app_flutter_ai/core/providers/task_provider.dart';
-import 'package:app_flutter_ai/core/services/llm_service.dart';
+import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;

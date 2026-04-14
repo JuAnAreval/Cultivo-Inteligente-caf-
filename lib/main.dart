@@ -1,14 +1,15 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/providers/task_provider.dart';
-import 'package:app_flutter_ai/core/services/session_service.dart';
-import 'package:app_flutter_ai/core/services/sync_service.dart';
+import 'package:app_flutter_ai/core/services/auth/auth_service.dart';
+import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 import 'package:app_flutter_ai/screens/ai/dashboard_screen.dart';
 import 'package:app_flutter_ai/screens/auth/login_screen.dart';
-import 'package:app_flutter_ai/screens/farms/add_farm_screen.dart';
-import 'package:app_flutter_ai/screens/farms/farm_list_screen.dart';
+import 'package:app_flutter_ai/screens/fincas/add_farm_screen.dart';
+import 'package:app_flutter_ai/screens/fincas/farm_list_screen.dart';
 import 'package:app_flutter_ai/screens/home/home_screen.dart';
-import 'package:app_flutter_ai/screens/lots/add_lot_screen.dart';
-import 'package:app_flutter_ai/screens/lots/lot_list_screen.dart';
+import 'package:app_flutter_ai/screens/lotes/add_lot_screen.dart';
+import 'package:app_flutter_ai/screens/lotes/lot_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +18,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es');
   await SessionService.init();
-  if (SessionService.isAuthenticated) {
+  final hasSession = await AuthService.ensureValidSession();
+  if (hasSession) {
     await SyncService.syncAll();
   }
 
@@ -26,13 +28,18 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => TaskProvider()),
       ],
-      child: const MyApp(),
+      child: MyApp(hasSession: hasSession),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({
+    super.key,
+    required this.hasSession,
+  });
+
+  final bool hasSession;
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +73,7 @@ class MyApp extends StatelessWidget {
               farmName: '',
             ),
       },
-      initialRoute: '/login',
+      initialRoute: hasSession ? '/home' : '/login',
     );
   }
 }

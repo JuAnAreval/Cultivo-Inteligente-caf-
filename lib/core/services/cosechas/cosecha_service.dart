@@ -1,10 +1,10 @@
 import 'package:app_flutter_ai/core/config/api_config.dart';
-import 'package:app_flutter_ai/core/services/database_helper.dart';
-import 'package:app_flutter_ai/core/services/http_client.dart';
-import 'package:app_flutter_ai/core/services/session_service.dart';
-import 'package:app_flutter_ai/core/services/sync_service.dart';
+import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
+import 'package:app_flutter_ai/core/services/shared/http_client.dart';
+import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 
-class LoteService {
+class CosechaService {
   static Future<Map<String, dynamic>> getAll({
     int page = 1,
     int limit = 100,
@@ -12,18 +12,17 @@ class LoteService {
   }) async {
     await SyncService.syncAll();
 
-    var lotes = await DatabaseHelper().getVisibleLotes();
+    var cosechas = await DatabaseHelper().getVisibleCosechas();
 
     if (search.trim().isNotEmpty) {
       final query = search.trim().toLowerCase();
-      lotes = lotes.where((lote) {
-        final nombre = (lote['nombre_lote'] ?? '').toString().toLowerCase();
-        final tipo = (lote['tipo_cafe'] ?? '').toString().toLowerCase();
-        return nombre.contains(query) || tipo.contains(query);
+      cosechas = cosechas.where((cosecha) {
+        return (cosecha['proceso'] ?? '').toString().toLowerCase().contains(query) ||
+            (cosecha['anio'] ?? '').toString().toLowerCase().contains(query);
       }).toList();
     }
 
-    final normalized = lotes
+    final normalized = cosechas
         .skip((page - 1) * limit)
         .take(limit)
         .map(_toViewMap)
@@ -31,14 +30,14 @@ class LoteService {
 
     return {
       'data': normalized,
-      'totalItems': lotes.length,
-      'hasNextPage': page * limit < lotes.length,
+      'totalItems': cosechas.length,
+      'hasNextPage': page * limit < cosechas.length,
       'source': 'local',
     };
   }
 
-  static Future<Map<String, dynamic>> create(Map<String, dynamic> lote) async {
-    final fincaLocalId = toInt(lote['id_finca']);
+  static Future<Map<String, dynamic>> create(Map<String, dynamic> data) async {
+    final fincaLocalId = toInt(data['id_finca']);
     if (fincaLocalId == null) {
       throw Exception('La finca asociada no es valida.');
     }
@@ -49,13 +48,14 @@ class LoteService {
     }
 
     final now = DateTime.now().toIso8601String();
-    final localId = await DatabaseHelper().insertLocalLote({
+    final localId = await DatabaseHelper().insertLocalCosecha({
       'finca_local_id': fincaLocalId,
       'finca_remote_id': finca['remote_id']?.toString(),
-      'nombre_lote': lote['nombre_lote']?.toString(),
-      'tipo_cafe': lote['tipo_cafe']?.toString(),
-      'edad_cultivo': toDouble(lote['edad_cultivo']),
-      'hectareas_lote': toDouble(lote['hectareas_lote']),
+      'fecha': data['fecha']?.toString(),
+      'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
+      'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
+      'proceso': data['proceso']?.toString(),
+      'anio': toInt(data['anio'] ?? data['año']),
       'created_by': SessionService.userId,
       'workspace_id': ApiConfig.workspaceId,
       'sync_status': DatabaseHelper.pendingCreate,
@@ -66,8 +66,7 @@ class LoteService {
     });
 
     await SyncService.syncAll();
-    final saved = await DatabaseHelper().getLoteByLocalId(localId);
-
+    final saved = await DatabaseHelper().getCosechaByLocalId(localId);
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -77,16 +76,16 @@ class LoteService {
 
   static Future<Map<String, dynamic>> update(
     String id,
-    Map<String, dynamic> lote,
+    Map<String, dynamic> data,
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote invalido.');
+      throw Exception('Id de cosecha invalido.');
     }
 
-    final existing = await DatabaseHelper().getLoteByLocalId(localId);
+    final existing = await DatabaseHelper().getCosechaByLocalId(localId);
     if (existing == null) {
-      throw Exception('No se encontro el lote.');
+      throw Exception('No se encontro la cosecha.');
     }
 
     final nextStatus =
@@ -94,19 +93,19 @@ class LoteService {
             ? DatabaseHelper.pendingCreate
             : DatabaseHelper.pendingUpdate;
 
-    await DatabaseHelper().updateLocalLote(localId, {
-      'nombre_lote': lote['nombre_lote']?.toString(),
-      'tipo_cafe': lote['tipo_cafe']?.toString(),
-      'edad_cultivo': toDouble(lote['edad_cultivo']),
-      'hectareas_lote': toDouble(lote['hectareas_lote']),
+    await DatabaseHelper().updateLocalCosecha(localId, {
+      'fecha': data['fecha']?.toString(),
+      'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
+      'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
+      'proceso': data['proceso']?.toString(),
+      'anio': toInt(data['anio'] ?? data['año']),
       'sync_status': nextStatus,
       'updated_at': DateTime.now().toIso8601String(),
       'last_error': null,
     });
 
     await SyncService.syncAll();
-    final saved = await DatabaseHelper().getLoteByLocalId(localId);
-
+    final saved = await DatabaseHelper().getCosechaByLocalId(localId);
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -117,18 +116,18 @@ class LoteService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote invalido.');
+      throw Exception('Id de cosecha invalido.');
     }
 
-    final existing = await DatabaseHelper().getLoteByLocalId(localId);
+    final existing = await DatabaseHelper().getCosechaByLocalId(localId);
     if (existing == null) {
       return {'success': true};
     }
 
     if (existing['remote_id'] == null) {
-      await DatabaseHelper().deleteLocalLote(localId);
+      await DatabaseHelper().deleteLocalCosecha(localId);
     } else {
-      await DatabaseHelper().updateLocalLote(localId, {
+      await DatabaseHelper().updateLocalCosecha(localId, {
         'deleted': 1,
         'sync_status': DatabaseHelper.pendingDelete,
         'updated_at': DateTime.now().toIso8601String(),
@@ -148,33 +147,30 @@ class LoteService {
       'page': '$page',
       'limit': '$limit',
     };
-
     if (search.trim().isNotEmpty) {
       queryParameters['search'] = search.trim();
     }
-
     final url = Uri.parse(
-      ApiConfig.loteUrl,
+      ApiConfig.cosechaUrl,
     ).replace(queryParameters: queryParameters).toString();
-
     return HttpClient.get(url);
   }
 
   static Future<Map<String, dynamic>> createRemote(
-    Map<String, dynamic> lote,
+    Map<String, dynamic> data,
   ) async {
-    return HttpClient.post(ApiConfig.loteUrl, lote);
+    return HttpClient.post(ApiConfig.cosechaUrl, data);
   }
 
   static Future<Map<String, dynamic>> updateRemote(
     String id,
-    Map<String, dynamic> lote,
+    Map<String, dynamic> data,
   ) async {
-    return HttpClient.patch('${ApiConfig.loteUrl}/$id', lote);
+    return HttpClient.patch('${ApiConfig.cosechaUrl}/$id', data);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {
-    return HttpClient.delete('${ApiConfig.loteUrl}/$id');
+    return HttpClient.delete('${ApiConfig.cosechaUrl}/$id');
   }
 
   static Map<String, dynamic> extractRecord(Map<String, dynamic> response) {
@@ -185,14 +181,15 @@ class LoteService {
     return response;
   }
 
-  static Map<String, dynamic> toRemotePayload(Map<String, dynamic> lote) {
+  static Map<String, dynamic> toRemotePayload(Map<String, dynamic> data) {
     return {
       'id_finca':
-          lote['finca_remote_id']?.toString() ?? lote['id_finca']?.toString(),
-      'nombre_lote': lote['nombre_lote']?.toString(),
-      'tipo_cafe': lote['tipo_cafe']?.toString(),
-      'edad_cultivo': toDouble(lote['edad_cultivo']),
-      'hectareas_lote': toDouble(lote['hectareas_lote']),
+          data['finca_remote_id']?.toString() ?? data['id_finca']?.toString(),
+      'fecha': data['fecha']?.toString(),
+      'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
+      'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
+      'proceso': data['proceso']?.toString(),
+      'anio': toInt(data['anio'] ?? data['año']),
     };
   }
 
@@ -202,10 +199,11 @@ class LoteService {
       'remoteId': row['remote_id']?.toString(),
       'id_finca': row['finca_local_id']?.toString(),
       'finca_remote_id': row['finca_remote_id']?.toString(),
-      'nombre_lote': row['nombre_lote']?.toString() ?? '',
-      'tipo_cafe': row['tipo_cafe']?.toString() ?? '',
-      'edad_cultivo': row['edad_cultivo'],
-      'hectareas_lote': row['hectareas_lote'],
+      'fecha': row['fecha']?.toString(),
+      'kilos_cereza': row['kilos_cereza'],
+      'kilos_pergamino': row['kilos_pergamino'],
+      'proceso': row['proceso']?.toString() ?? '',
+      'anio': row['anio'],
       'createdBy': row['created_by'],
       'workspaceId': row['workspace_id'],
       'syncStatus': row['sync_status']?.toString() ?? DatabaseHelper.synced,
@@ -214,11 +212,5 @@ class LoteService {
     };
   }
 
-  static double? toDouble(dynamic value) {
-    return DatabaseHelper.toDouble(value);
-  }
-
-  static int? toInt(dynamic value) {
-    return DatabaseHelper.toInt(value);
-  }
+  static int? toInt(dynamic value) => DatabaseHelper.toInt(value);
 }

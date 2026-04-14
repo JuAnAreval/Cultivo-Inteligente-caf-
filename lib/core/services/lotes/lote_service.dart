@@ -1,31 +1,29 @@
 import 'package:app_flutter_ai/core/config/api_config.dart';
-import 'package:app_flutter_ai/core/services/database_helper.dart';
-import 'package:app_flutter_ai/core/services/http_client.dart';
-import 'package:app_flutter_ai/core/services/session_service.dart';
-import 'package:app_flutter_ai/core/services/sync_service.dart';
+import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
+import 'package:app_flutter_ai/core/services/shared/http_client.dart';
+import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 
-class FincaService {
+class LoteService {
   static Future<Map<String, dynamic>> getAll({
     int page = 1,
-    int limit = 50,
+    int limit = 100,
     String search = '',
   }) async {
     await SyncService.syncAll();
 
-    final currentUserId = SessionService.userId;
-    var fincas = await DatabaseHelper().getVisibleFincas(createdBy: currentUserId);
+    var lotes = await DatabaseHelper().getVisibleLotes();
 
     if (search.trim().isNotEmpty) {
       final query = search.trim().toLowerCase();
-      fincas = fincas.where((finca) {
-        final nombre = (finca['nombre'] ?? '').toString().toLowerCase();
-        final ubicacion =
-            (finca['ubicacion_texto'] ?? '').toString().toLowerCase();
-        return nombre.contains(query) || ubicacion.contains(query);
+      lotes = lotes.where((lote) {
+        final nombre = (lote['nombre_lote'] ?? '').toString().toLowerCase();
+        final tipo = (lote['tipo_cafe'] ?? '').toString().toLowerCase();
+        return nombre.contains(query) || tipo.contains(query);
       }).toList();
     }
 
-    final normalized = fincas
+    final normalized = lotes
         .skip((page - 1) * limit)
         .take(limit)
         .map(_toViewMap)
@@ -33,34 +31,31 @@ class FincaService {
 
     return {
       'data': normalized,
-      'totalItems': fincas.length,
-      'hasNextPage': page * limit < fincas.length,
+      'totalItems': lotes.length,
+      'hasNextPage': page * limit < lotes.length,
       'source': 'local',
     };
   }
 
-  static Future<Map<String, dynamic>?> getById(String id) async {
-    final localId = int.tryParse(id);
-    if (localId == null) {
-      return null;
+  static Future<Map<String, dynamic>> create(Map<String, dynamic> lote) async {
+    final fincaLocalId = toInt(lote['id_finca']);
+    if (fincaLocalId == null) {
+      throw Exception('La finca asociada no es valida.');
     }
 
-    final finca = await DatabaseHelper().getFincaByLocalId(localId);
+    final finca = await DatabaseHelper().getFincaByLocalId(fincaLocalId);
     if (finca == null) {
-      return null;
+      throw Exception('No se encontro la finca asociada.');
     }
 
-    return _toViewMap(finca);
-  }
-
-  static Future<Map<String, dynamic>> create(Map<String, dynamic> finca) async {
     final now = DateTime.now().toIso8601String();
-    final localId = await DatabaseHelper().insertLocalFinca({
-      'nombre': finca['nombre']?.toString(),
-      'ubicacion_texto': finca['ubicacion_texto']?.toString(),
-      'latitud': toDouble(finca['latitud']),
-      'longitud': toDouble(finca['longitud']),
-      'area_hectareas': toDouble(finca['area_hectareas']),
+    final localId = await DatabaseHelper().insertLocalLote({
+      'finca_local_id': fincaLocalId,
+      'finca_remote_id': finca['remote_id']?.toString(),
+      'nombre_lote': lote['nombre_lote']?.toString(),
+      'tipo_cafe': lote['tipo_cafe']?.toString(),
+      'edad_cultivo': toDouble(lote['edad_cultivo']),
+      'hectareas_lote': toDouble(lote['hectareas_lote']),
       'created_by': SessionService.userId,
       'workspace_id': ApiConfig.workspaceId,
       'sync_status': DatabaseHelper.pendingCreate,
@@ -71,7 +66,7 @@ class FincaService {
     });
 
     await SyncService.syncAll();
-    final saved = await DatabaseHelper().getFincaByLocalId(localId);
+    final saved = await DatabaseHelper().getLoteByLocalId(localId);
 
     return {
       'success': true,
@@ -82,16 +77,16 @@ class FincaService {
 
   static Future<Map<String, dynamic>> update(
     String id,
-    Map<String, dynamic> finca,
+    Map<String, dynamic> lote,
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca invalido.');
+      throw Exception('Id de lote invalido.');
     }
 
-    final existing = await DatabaseHelper().getFincaByLocalId(localId);
+    final existing = await DatabaseHelper().getLoteByLocalId(localId);
     if (existing == null) {
-      throw Exception('No se encontro la finca.');
+      throw Exception('No se encontro el lote.');
     }
 
     final nextStatus =
@@ -99,19 +94,18 @@ class FincaService {
             ? DatabaseHelper.pendingCreate
             : DatabaseHelper.pendingUpdate;
 
-    await DatabaseHelper().updateLocalFinca(localId, {
-      'nombre': finca['nombre']?.toString(),
-      'ubicacion_texto': finca['ubicacion_texto']?.toString(),
-      'latitud': toDouble(finca['latitud']),
-      'longitud': toDouble(finca['longitud']),
-      'area_hectareas': toDouble(finca['area_hectareas']),
+    await DatabaseHelper().updateLocalLote(localId, {
+      'nombre_lote': lote['nombre_lote']?.toString(),
+      'tipo_cafe': lote['tipo_cafe']?.toString(),
+      'edad_cultivo': toDouble(lote['edad_cultivo']),
+      'hectareas_lote': toDouble(lote['hectareas_lote']),
       'sync_status': nextStatus,
       'updated_at': DateTime.now().toIso8601String(),
       'last_error': null,
     });
 
     await SyncService.syncAll();
-    final saved = await DatabaseHelper().getFincaByLocalId(localId);
+    final saved = await DatabaseHelper().getLoteByLocalId(localId);
 
     return {
       'success': true,
@@ -123,18 +117,18 @@ class FincaService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca invalido.');
+      throw Exception('Id de lote invalido.');
     }
 
-    final existing = await DatabaseHelper().getFincaByLocalId(localId);
+    final existing = await DatabaseHelper().getLoteByLocalId(localId);
     if (existing == null) {
       return {'success': true};
     }
 
     if (existing['remote_id'] == null) {
-      await DatabaseHelper().deleteLocalFinca(localId);
+      await DatabaseHelper().deleteLocalLote(localId);
     } else {
-      await DatabaseHelper().updateLocalFinca(localId, {
+      await DatabaseHelper().updateLocalLote(localId, {
         'deleted': 1,
         'sync_status': DatabaseHelper.pendingDelete,
         'updated_at': DateTime.now().toIso8601String(),
@@ -147,7 +141,7 @@ class FincaService {
 
   static Future<Map<String, dynamic>> fetchRemote({
     int page = 1,
-    int limit = 50,
+    int limit = 100,
     String search = '',
   }) async {
     final queryParameters = <String, String>{
@@ -160,27 +154,27 @@ class FincaService {
     }
 
     final url = Uri.parse(
-      ApiConfig.fincaUrl,
+      ApiConfig.loteUrl,
     ).replace(queryParameters: queryParameters).toString();
 
     return HttpClient.get(url);
   }
 
   static Future<Map<String, dynamic>> createRemote(
-    Map<String, dynamic> finca,
+    Map<String, dynamic> lote,
   ) async {
-    return HttpClient.post(ApiConfig.fincaUrl, finca);
+    return HttpClient.post(ApiConfig.loteUrl, lote);
   }
 
   static Future<Map<String, dynamic>> updateRemote(
     String id,
-    Map<String, dynamic> finca,
+    Map<String, dynamic> lote,
   ) async {
-    return HttpClient.patch('${ApiConfig.fincaUrl}/$id', finca);
+    return HttpClient.patch('${ApiConfig.loteUrl}/$id', lote);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {
-    return HttpClient.delete('${ApiConfig.fincaUrl}/$id');
+    return HttpClient.delete('${ApiConfig.loteUrl}/$id');
   }
 
   static Map<String, dynamic> extractRecord(Map<String, dynamic> response) {
@@ -191,13 +185,14 @@ class FincaService {
     return response;
   }
 
-  static Map<String, dynamic> toRemotePayload(Map<String, dynamic> finca) {
+  static Map<String, dynamic> toRemotePayload(Map<String, dynamic> lote) {
     return {
-      'nombre': finca['nombre']?.toString(),
-      'ubicacion_texto': finca['ubicacion_texto']?.toString(),
-      'latitud': toDouble(finca['latitud']),
-      'longitud': toDouble(finca['longitud']),
-      'area_hectareas': toDouble(finca['area_hectareas']),
+      'id_finca':
+          lote['finca_remote_id']?.toString() ?? lote['id_finca']?.toString(),
+      'nombre_lote': lote['nombre_lote']?.toString(),
+      'tipo_cafe': lote['tipo_cafe']?.toString(),
+      'edad_cultivo': toDouble(lote['edad_cultivo']),
+      'hectareas_lote': toDouble(lote['hectareas_lote']),
     };
   }
 
@@ -205,11 +200,12 @@ class FincaService {
     return {
       'id': (row['local_id'] as num).toInt().toString(),
       'remoteId': row['remote_id']?.toString(),
-      'nombre': row['nombre']?.toString() ?? '',
-      'ubicacion_texto': row['ubicacion_texto']?.toString() ?? '',
-      'latitud': row['latitud'],
-      'longitud': row['longitud'],
-      'area_hectareas': row['area_hectareas'],
+      'id_finca': row['finca_local_id']?.toString(),
+      'finca_remote_id': row['finca_remote_id']?.toString(),
+      'nombre_lote': row['nombre_lote']?.toString() ?? '',
+      'tipo_cafe': row['tipo_cafe']?.toString() ?? '',
+      'edad_cultivo': row['edad_cultivo'],
+      'hectareas_lote': row['hectareas_lote'],
       'createdBy': row['created_by'],
       'workspaceId': row['workspace_id'],
       'syncStatus': row['sync_status']?.toString() ?? DatabaseHelper.synced,

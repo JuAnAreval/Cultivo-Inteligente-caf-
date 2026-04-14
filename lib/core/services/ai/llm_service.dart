@@ -25,7 +25,7 @@ class LlmService {
   }
 
   Future<Map<String, dynamic>?> processCommand(String command) async {
-    final dateStr = DateTime.now().toIso8601String().split('T')[0];
+    final today = DateTime.now().toIso8601String().split('T').first;
 
     final rules = '''
 Eres un experto en gestion y productividad. Mapea la orden del usuario a JSON aplicando estas reglas estrictas:
@@ -33,7 +33,7 @@ Eres un experto en gestion y productividad. Mapea la orden del usuario a JSON ap
 2. "details": conserva el texto original completo, sin omitir ni resumir.
 3. "subActivities": inventa obligatoriamente 3 pasos logicos, creativos y detallados.
 4. "category": una sola palabra y estrictamente en espanol.
-5. Fechas e ISO8601: extrae la hora exacta asumiendo que hoy es $dateStr. Si no da fecha, usa las 18:00:00 de hoy.
+5. Fechas e ISO8601: extrae la hora exacta asumiendo que hoy es $today. Si no da fecha, usa las 18:00:00 de hoy.
 6. No uses Markdown. Devuelve exclusivamente JSON puro.
 
 Formato requerido:
@@ -43,15 +43,22 @@ Formato requerido:
   "color": "#42A5F5",
   "category": "[Categoria En Espanol]",
   "details": "[Texto completo intacto]",
-  "dueDate": "${dateStr}T18:00:00",
+  "dueDate": "${today}T18:00:00",
   "subActivities": [
-    {"title": "[Paso 1]", "date": "${dateStr}T10:00:00"},
-    {"title": "[Paso 2]", "date": "${dateStr}T12:00:00"},
-    {"title": "[Paso 3]", "date": "${dateStr}T18:00:00"}
+    {"title": "[Paso 1]", "date": "${today}T10:00:00"},
+    {"title": "[Paso 2]", "date": "${today}T12:00:00"},
+    {"title": "[Paso 3]", "date": "${today}T18:00:00"}
   ]
 }
 ''';
 
+    return processWithRules(rules: rules, command: command);
+  }
+
+  Future<Map<String, dynamic>?> processWithRules({
+    required String rules,
+    required String command,
+  }) async {
     final prompt = _buildPrompt(rules, command);
 
     try {

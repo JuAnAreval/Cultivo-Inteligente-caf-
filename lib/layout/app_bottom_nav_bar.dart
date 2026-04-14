@@ -75,39 +75,48 @@ class _BottomNavButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       splashColor: AppColors.clay.withValues(alpha: 0.2),
       highlightColor: Colors.transparent,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.clay : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: Icon(
-                item.icon,
-                key: ValueKey(selected),
-                color: selected ? AppColors.surface : AppColors.sand,
-                size: selected ? 26 : 24,
+      child: SizedBox(
+        height: 64,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.clay : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedScale(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                scale: selected ? 1.0 : 0.96,
+                child: Icon(
+                  item.icon,
+                  color: selected ? AppColors.surface : AppColors.sand,
+                  size: 24,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              item.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? AppColors.surface : AppColors.sand,
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                letterSpacing: selected ? 0.2 : 0,
+              const SizedBox(height: 4),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                style: TextStyle(
+                  color: selected ? AppColors.surface : AppColors.sand,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  letterSpacing: selected ? 0.2 : 0,
+                ),
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

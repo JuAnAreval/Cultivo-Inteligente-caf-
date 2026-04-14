@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/models/task_model.dart';
 import 'package:app_flutter_ai/core/providers/task_provider.dart';
-import 'package:app_flutter_ai/core/services/llm_service.dart';
+import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
 import 'package:app_flutter_ai/screens/ai/widgets/ai_chat_block.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
