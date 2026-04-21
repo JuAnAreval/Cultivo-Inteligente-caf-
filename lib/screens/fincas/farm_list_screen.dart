@@ -1,6 +1,7 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/fincas/finca_service.dart';
+import 'package:app_flutter_ai/screens/cosechas/cosecha_list_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/add_farm_screen.dart';
 import 'package:app_flutter_ai/screens/lotes/lot_list_screen.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,9 @@ class _FarmListScreenState extends State<FarmListScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _farmsFuture = _loadFarms();
     });
@@ -243,6 +247,24 @@ class _FarmListScreenState extends State<FarmListScreen> {
                         ),
                       );
                     },
+                    onOpenCosechas: () {
+                      final farmId = (farm['id'] ?? '').toString();
+                      final farmName = (farm['nombre'] ?? 'Finca').toString();
+
+                      if (farmId.isEmpty) {
+                        return;
+                      }
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CosechaListScreen(
+                            farmId: farmId,
+                            farmName: farmName,
+                          ),
+                        ),
+                      );
+                    },
                     onEdit: () => _openFarmForm(farm: farm),
                     onDelete: () => _deleteFarm(farm),
                   ),
@@ -343,7 +365,7 @@ class _FarmHeroCard extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'Entra a cada finca para ver sus lotes, registrar actividades y mantener tu informacion organizada.',
+            'Entra a cada finca para ver sus lotes, registrar actividades y mantener tu información organizada.',
             style: TextStyle(
               color: AppColors.textSecondary,
               height: 1.45,
@@ -398,12 +420,14 @@ class _FarmCard extends StatelessWidget {
   const _FarmCard({
     required this.farm,
     required this.onTap,
+    required this.onOpenCosechas,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Map<String, dynamic> farm;
   final VoidCallback onTap;
+  final VoidCallback onOpenCosechas;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -412,8 +436,6 @@ class _FarmCard extends StatelessWidget {
     final nombre = (farm['nombre'] ?? '').toString();
     final ubicacion = (farm['ubicacion_texto'] ?? '').toString();
     final area = (farm['area_hectareas'] ?? '').toString();
-    final latitud = (farm['latitud'] ?? '').toString();
-    final longitud = (farm['longitud'] ?? '').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -450,7 +472,7 @@ class _FarmCard extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             ubicacion.isEmpty
-                                ? 'Sin ubicacion registrada'
+                                ? 'Sin ubicación registrada'
                                 : ubicacion,
                             style: const TextStyle(
                               color: AppColors.textSecondary,
@@ -487,32 +509,35 @@ class _FarmCard extends StatelessWidget {
                   children: [
                     _FarmChip(
                       icon: Icons.crop_landscape_rounded,
-                      text: area.isEmpty ? 'Area no definida' : '$area ha',
-                    ),
-                    _FarmChip(
-                      icon: Icons.my_location_rounded,
-                      text: latitud.isEmpty ? 'Sin latitud' : latitud,
-                    ),
-                    _FarmChip(
-                      icon: Icons.explore_rounded,
-                      text: longitud.isEmpty ? 'Sin longitud' : longitud,
+                      text:
+                          area.isEmpty ? 'Area no definida' : '$area hectareas',
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Row(
+                Row(
                   children: [
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 18,
-                      color: AppColors.moss,
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onTap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.moss,
+                          side: const BorderSide(color: AppColors.sand),
+                        ),
+                        icon: const Icon(Icons.grid_view_rounded),
+                        label: const Text('Lotes'),
+                      ),
                     ),
-                    SizedBox(width: 6),
-                    Text(
-                      'Entrar a lotes de esta finca',
-                      style: TextStyle(
-                        color: AppColors.moss,
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onOpenCosechas,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.clayStrong,
+                          side: const BorderSide(color: AppColors.sand),
+                        ),
+                        icon: const Icon(Icons.agriculture_rounded),
+                        label: const Text('Cosechas'),
                       ),
                     ),
                   ],
@@ -617,7 +642,7 @@ class _EmptyFarmCard extends StatelessWidget {
           ),
           SizedBox(height: 14),
           Text(
-            'Aun no hay fincas creadas',
+            'Aún no hay fincas creadas',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

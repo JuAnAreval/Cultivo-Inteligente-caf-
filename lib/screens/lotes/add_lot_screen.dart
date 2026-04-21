@@ -161,7 +161,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Este lote quedara asociado a la finca ${widget.farmName}.',
+                      'Este lote quedará asociado a la finca ${widget.farmName}.',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         height: 1.5,
@@ -184,7 +184,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
                     const SizedBox(height: 16),
                     _LotTextField(
                       controller: _tipoCafeController,
-                      label: 'Tipo de cafe',
+                      label: 'Tipo de café',
                       hint: 'Ej: Castillo',
                       icon: Icons.local_florist_rounded,
                       validator: _validateRequired,
@@ -208,7 +208,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
                         Expanded(
                           child: _LotTextField(
                             controller: _hectareasController,
-                            label: 'Hectareas',
+                            label: 'Hectáreas',
                             hint: 'Ej: 1.5',
                             icon: Icons.crop_rounded,
                             keyboardType: const TextInputType.numberWithOptions(
@@ -238,13 +238,13 @@ class _AddLotScreenState extends State<AddLotScreen> {
                     const SizedBox(height: 12),
                     _PreviewRow(label: 'Finca', value: widget.farmName),
                     _PreviewRow(label: 'Nombre lote', value: _nombreController.text),
-                    _PreviewRow(label: 'Tipo cafe', value: _tipoCafeController.text),
+                    _PreviewRow(label: 'Tipo café', value: _tipoCafeController.text),
                     _PreviewRow(
                       label: 'Edad cultivo',
                       value: _edadCultivoController.text,
                     ),
                     _PreviewRow(
-                      label: 'Hectareas lote',
+                      label: 'Hectáreas lote',
                       value: _hectareasController.text,
                     ),
                   ],
@@ -303,7 +303,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
 
     final parsed = double.tryParse(value.trim().replaceAll(',', '.'));
     if (parsed == null) {
-      return 'Ingresa un numero valido';
+      return 'Ingresa un número válido';
     }
 
     return null;

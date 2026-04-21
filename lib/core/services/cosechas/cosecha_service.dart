@@ -2,22 +2,25 @@ import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class CosechaService {
+  static const String _yearField = 'a\u00f1o';
+
   static Future<Map<String, dynamic>> getAll({
     int page = 1,
     int limit = 100,
     String search = '',
   }) async {
-    await SyncService.syncAll();
-
     var cosechas = await DatabaseHelper().getVisibleCosechas();
 
     if (search.trim().isNotEmpty) {
       final query = search.trim().toLowerCase();
       cosechas = cosechas.where((cosecha) {
-        return (cosecha['proceso'] ?? '').toString().toLowerCase().contains(query) ||
+        return (cosecha['proceso'] ?? '')
+                .toString()
+                .toLowerCase()
+                .contains(query) ||
             (cosecha['anio'] ?? '').toString().toLowerCase().contains(query);
       }).toList();
     }
@@ -39,12 +42,12 @@ class CosechaService {
   static Future<Map<String, dynamic>> create(Map<String, dynamic> data) async {
     final fincaLocalId = toInt(data['id_finca']);
     if (fincaLocalId == null) {
-      throw Exception('La finca asociada no es valida.');
+      throw Exception('La finca asociada no es válida.');
     }
 
     final finca = await DatabaseHelper().getFincaByLocalId(fincaLocalId);
     if (finca == null) {
-      throw Exception('No se encontro la finca asociada.');
+      throw Exception('No se encontró la finca asociada.');
     }
 
     final now = DateTime.now().toIso8601String();
@@ -55,7 +58,7 @@ class CosechaService {
       'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
       'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
       'proceso': data['proceso']?.toString(),
-      'anio': toInt(data['anio'] ?? data['año']),
+      'anio': _resolveYear(data),
       'created_by': SessionService.userId,
       'workspace_id': ApiConfig.workspaceId,
       'sync_status': DatabaseHelper.pendingCreate,
@@ -65,8 +68,8 @@ class CosechaService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getCosechaByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -80,32 +83,31 @@ class CosechaService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de cosecha invalido.');
+      throw Exception('Id de cosecha inválido.');
     }
 
     final existing = await DatabaseHelper().getCosechaByLocalId(localId);
     if (existing == null) {
-      throw Exception('No se encontro la cosecha.');
+      throw Exception('No se encontró la cosecha.');
     }
 
-    final nextStatus =
-        existing['remote_id'] == null
-            ? DatabaseHelper.pendingCreate
-            : DatabaseHelper.pendingUpdate;
+    final nextStatus = existing['remote_id'] == null
+        ? DatabaseHelper.pendingCreate
+        : DatabaseHelper.pendingUpdate;
 
     await DatabaseHelper().updateLocalCosecha(localId, {
       'fecha': data['fecha']?.toString(),
       'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
       'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
       'proceso': data['proceso']?.toString(),
-      'anio': toInt(data['anio'] ?? data['año']),
+      'anio': _resolveYear(data),
       'sync_status': nextStatus,
       'updated_at': DateTime.now().toIso8601String(),
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getCosechaByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -116,7 +118,7 @@ class CosechaService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de cosecha invalido.');
+      throw Exception('Id de cosecha inválido.');
     }
 
     final existing = await DatabaseHelper().getCosechaByLocalId(localId);
@@ -134,7 +136,8 @@ class CosechaService {
       });
     }
 
-    await SyncService.syncAll();
+    await PendingSyncService.refreshPendingCount();
+
     return {'success': true, 'source': 'local'};
   }
 
@@ -150,9 +153,8 @@ class CosechaService {
     if (search.trim().isNotEmpty) {
       queryParameters['search'] = search.trim();
     }
-    final url = Uri.parse(
-      ApiConfig.cosechaUrl,
-    ).replace(queryParameters: queryParameters).toString();
+    final url =
+        Uri.parse(ApiConfig.cosechaUrl).replace(queryParameters: queryParameters).toString();
     return HttpClient.get(url);
   }
 
@@ -166,7 +168,7 @@ class CosechaService {
     String id,
     Map<String, dynamic> data,
   ) async {
-    return HttpClient.patch('${ApiConfig.cosechaUrl}/$id', data);
+    return HttpClient.put('${ApiConfig.cosechaUrl}/$id', data);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {
@@ -189,7 +191,7 @@ class CosechaService {
       'kilos_cereza': DatabaseHelper.toDouble(data['kilos_cereza']),
       'kilos_pergamino': DatabaseHelper.toDouble(data['kilos_pergamino']),
       'proceso': data['proceso']?.toString(),
-      'anio': toInt(data['anio'] ?? data['año']),
+      _yearField: _resolveYear(data),
     };
   }
 
@@ -213,4 +215,18 @@ class CosechaService {
   }
 
   static int? toInt(dynamic value) => DatabaseHelper.toInt(value);
+
+  static int? _resolveYear(Map<String, dynamic> data) {
+    final explicitYear = toInt(data['anio'] ?? data[_yearField]);
+    if (explicitYear != null) {
+      return explicitYear;
+    }
+
+    final fecha = data['fecha']?.toString().trim() ?? '';
+    if (fecha.length >= 4) {
+      return int.tryParse(fecha.substring(0, 4));
+    }
+
+    return null;
+  }
 }

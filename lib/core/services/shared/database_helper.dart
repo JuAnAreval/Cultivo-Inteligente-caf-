@@ -17,6 +17,7 @@ class DatabaseHelper {
   static const String pendingUpdate = 'pending_update';
   static const String pendingDelete = 'pending_delete';
   static const String synced = 'synced';
+  static const String appActivitiesTable = 'actividades_cultiva_tec';
 
   Future<Database> get database async {
     if (_database != null) {
@@ -32,7 +33,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await _createTasksTable(db);
         await _createFincasTable(db);
@@ -42,8 +43,11 @@ class DatabaseHelper {
         await _createCosechasTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 6) {
+          await _migrateTasksTableName(db);
+        }
         if (oldVersion < 2) {
-          await _safeAddColumn(db, 'tasks', 'dueDate', 'TEXT');
+          await _safeAddColumn(db, appActivitiesTable, 'dueDate', 'TEXT');
         }
         if (oldVersion < 3) {
           await _createFincasTable(db);
@@ -81,7 +85,7 @@ class DatabaseHelper {
 
   Future<void> _createTasksTable(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS tasks(
+      CREATE TABLE IF NOT EXISTS $appActivitiesTable(
         id TEXT PRIMARY KEY,
         title TEXT,
         state TEXT,
@@ -92,6 +96,32 @@ class DatabaseHelper {
         subActivities TEXT
       )
     ''');
+  }
+
+  Future<void> _migrateTasksTableName(Database db) async {
+    final hasLegacyTable = await _tableExists(db, 'tasks');
+    final hasNewTable = await _tableExists(db, appActivitiesTable);
+
+    if (hasLegacyTable && !hasNewTable) {
+      await db.execute('ALTER TABLE tasks RENAME TO $appActivitiesTable');
+      return;
+    }
+
+    if (!hasLegacyTable && !hasNewTable) {
+      await _createTasksTable(db);
+    }
+  }
+
+  Future<bool> _tableExists(Database db, String tableName) async {
+    final result = await db.query(
+      'sqlite_master',
+      columns: ['name'],
+      where: 'type = ? AND name = ?',
+      whereArgs: ['table', tableName],
+      limit: 1,
+    );
+
+    return result.isNotEmpty;
   }
 
   Future<void> _createFincasTable(Database db) async {
@@ -213,7 +243,7 @@ class DatabaseHelper {
     data['subActivities'] = jsonEncode(data['subActivities']);
 
     await db.insert(
-      'tasks',
+      appActivitiesTable,
       data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -225,7 +255,7 @@ class DatabaseHelper {
     data['subActivities'] = jsonEncode(data['subActivities']);
 
     await db.update(
-      'tasks',
+      appActivitiesTable,
       data,
       where: 'id = ?',
       whereArgs: [task.id],
@@ -235,7 +265,7 @@ class DatabaseHelper {
   Future<void> deleteTask(String id) async {
     final db = await database;
     await db.delete(
-      'tasks',
+      appActivitiesTable,
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -243,12 +273,11 @@ class DatabaseHelper {
 
   Future<List<AppTask>> getTasks() async {
     final db = await database;
-    final rows = await db.query('tasks');
+    final rows = await db.query(appActivitiesTable);
 
     return List.generate(rows.length, (index) {
       final taskMap = Map<String, dynamic>.from(rows[index]);
-      taskMap['subActivities'] =
-          jsonDecode(taskMap['subActivities'] as String);
+      taskMap['subActivities'] = jsonDecode(taskMap['subActivities'] as String);
       return AppTask.fromJson(taskMap);
     });
   }
@@ -422,6 +451,18 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getVisibleLotesByFinca(
+    int fincaLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'lotes_local',
+      where: 'deleted = 0 AND finca_local_id = ?',
+      whereArgs: [fincaLocalId],
+      orderBy: 'updated_at DESC',
+    );
+  }
+
   Future<Map<String, dynamic>?> getLoteByLocalId(int localId) async {
     final db = await database;
     final rows = await db.query(
@@ -556,6 +597,18 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getVisibleActividadesByLote(
+    int loteLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'actividades_campo_local',
+      where: 'deleted = 0 AND lote_local_id = ?',
+      whereArgs: [loteLocalId],
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
   Future<Map<String, dynamic>?> getActividadByLocalId(int localId) async {
     final db = await database;
     final rows = await db.query(
@@ -657,7 +710,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> updateLocalInsumo(int localId, Map<String, dynamic> insumo) async {
+  Future<void> updateLocalInsumo(
+      int localId, Map<String, dynamic> insumo) async {
     final db = await database;
     await db.update(
       'insumos_local',
@@ -681,6 +735,18 @@ class DatabaseHelper {
     return db.query(
       'insumos_local',
       where: 'deleted = 0',
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getVisibleInsumosByLote(
+    int loteLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'insumos_local',
+      where: 'deleted = 0 AND lote_local_id = ?',
+      whereArgs: [loteLocalId],
       orderBy: 'fecha DESC, updated_at DESC',
     );
   }
@@ -817,6 +883,18 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getVisibleCosechasByFinca(
+    int fincaLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'cosechas_local',
+      where: 'deleted = 0 AND finca_local_id = ?',
+      whereArgs: [fincaLocalId],
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
   Future<Map<String, dynamic>?> getCosechaByLocalId(int localId) async {
     final db = await database;
     final rows = await db.query(
@@ -908,6 +986,34 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> getPendingChangesCount() async {
+    final fincas = await _countPendingRows('fincas_local');
+    final lotes = await _countPendingRows('lotes_local');
+    final actividades = await _countPendingRows('actividades_campo_local');
+    final insumos = await _countPendingRows('insumos_local');
+    final cosechas = await _countPendingRows('cosechas_local');
+
+    return fincas + lotes + actividades + insumos + cosechas;
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingChangesDetails() async {
+    final items = <Map<String, dynamic>>[
+      ...await _mapPendingFincas(),
+      ...await _mapPendingLotes(),
+      ...await _mapPendingActividades(),
+      ...await _mapPendingInsumos(),
+      ...await _mapPendingCosechas(),
+    ];
+
+    items.sort((a, b) {
+      final left = (a['updatedAt'] ?? '').toString();
+      final right = (b['updatedAt'] ?? '').toString();
+      return right.compareTo(left);
+    });
+
+    return items;
+  }
+
   Future<void> _removeMissingRemoteRows({
     required String tableName,
     required Set<String> remoteIds,
@@ -935,6 +1041,104 @@ class DatabaseHelper {
         whereArgs: [row['local_id']],
       );
     }
+  }
+
+  Future<int> _countPendingRows(String tableName) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM $tableName WHERE sync_status != ?',
+      [synced],
+    );
+
+    if (result.isEmpty) {
+      return 0;
+    }
+
+    return toInt(result.first['total']) ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> _mapPendingFincas() async {
+    final rows = await getPendingFincas();
+    return rows.map((row) {
+      return {
+        'module': 'Fincas',
+        'title': row['nombre']?.toString() ?? 'Finca sin nombre',
+        'subtitle': row['ubicacion_texto']?.toString() ?? '',
+        'syncStatus': row['sync_status']?.toString() ?? pendingCreate,
+        'lastError': row['last_error']?.toString(),
+        'updatedAt': row['updated_at']?.toString(),
+        'localId': row['local_id']?.toString(),
+        'remoteId': row['remote_id']?.toString(),
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _mapPendingLotes() async {
+    final rows = await getPendingLotes();
+    return rows.map((row) {
+      return {
+        'module': 'Lotes',
+        'title': row['nombre_lote']?.toString() ?? 'Lote sin nombre',
+        'subtitle': row['tipo_cafe']?.toString() ?? '',
+        'syncStatus': row['sync_status']?.toString() ?? pendingCreate,
+        'lastError': row['last_error']?.toString(),
+        'updatedAt': row['updated_at']?.toString(),
+        'localId': row['local_id']?.toString(),
+        'remoteId': row['remote_id']?.toString(),
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _mapPendingActividades() async {
+    final rows = await getPendingActividades();
+    return rows.map((row) {
+      final fecha = row['fecha']?.toString() ?? '';
+      return {
+        'module': 'Actividades',
+        'title': row['actividad']?.toString() ?? 'Actividad sin descripcion',
+        'subtitle': fecha.isEmpty ? '' : 'Fecha: $fecha',
+        'syncStatus': row['sync_status']?.toString() ?? pendingCreate,
+        'lastError': row['last_error']?.toString(),
+        'updatedAt': row['updated_at']?.toString(),
+        'localId': row['local_id']?.toString(),
+        'remoteId': row['remote_id']?.toString(),
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _mapPendingInsumos() async {
+    final rows = await getPendingInsumos();
+    return rows.map((row) {
+      final fecha = row['fecha']?.toString() ?? '';
+      return {
+        'module': 'Insumos',
+        'title': row['insumo']?.toString() ?? 'Insumo sin nombre',
+        'subtitle': fecha.isEmpty ? '' : 'Fecha: $fecha',
+        'syncStatus': row['sync_status']?.toString() ?? pendingCreate,
+        'lastError': row['last_error']?.toString(),
+        'updatedAt': row['updated_at']?.toString(),
+        'localId': row['local_id']?.toString(),
+        'remoteId': row['remote_id']?.toString(),
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _mapPendingCosechas() async {
+    final rows = await getPendingCosechas();
+    return rows.map((row) {
+      final fecha = row['fecha']?.toString() ?? '';
+      final proceso = row['proceso']?.toString() ?? '';
+      return {
+        'module': 'Cosechas',
+        'title': fecha.isEmpty ? 'Cosecha sin fecha' : 'Cosecha del $fecha',
+        'subtitle': proceso.isEmpty ? '' : 'Proceso: $proceso',
+        'syncStatus': row['sync_status']?.toString() ?? pendingCreate,
+        'lastError': row['last_error']?.toString(),
+        'updatedAt': row['updated_at']?.toString(),
+        'localId': row['local_id']?.toString(),
+        'remoteId': row['remote_id']?.toString(),
+      };
+    }).toList();
   }
 
   static double? toDouble(dynamic value) {

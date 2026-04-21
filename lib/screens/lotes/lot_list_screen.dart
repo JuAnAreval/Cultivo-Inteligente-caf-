@@ -47,6 +47,9 @@ class _LotListScreenState extends State<LotListScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _lotsFuture = _loadLots();
     });
@@ -335,7 +338,7 @@ class _LotHeaderCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Entra a cada lote para ver sus actividades o usa editar para actualizar su informacion.',
+            'Entra a cada lote para ver sus actividades o usa editar para actualizar su información.',
             style: TextStyle(
               color: AppColors.textSecondary,
               height: 1.45,
@@ -460,13 +463,13 @@ class _LotCard extends StatelessWidget {
                       icon: Icons.timelapse_rounded,
                       text: edadCultivo.isEmpty
                           ? 'Edad no definida'
-                          : '$edadCultivo anos',
+                          : '$edadCultivo años',
                     ),
                     _LotChip(
                       icon: Icons.crop_landscape_rounded,
                       text: hectareas.isEmpty
                           ? 'Area no definida'
-                          : '$hectareas ha',
+                          : '$hectareas hectareas',
                     ),
                   ],
                 ),
@@ -600,7 +603,7 @@ class _EmptyLotsCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Aun no hay lotes creados',
+            'Aún no hay lotes creados',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

@@ -48,6 +48,9 @@ class _InsumoListScreenState extends State<InsumoListScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _insumosFuture = _loadInsumos();
     });
@@ -579,7 +582,7 @@ class _EmptyCard extends StatelessWidget {
           ),
           SizedBox(height: 14),
           Text(
-            'Aun no hay insumos registrados',
+            'Aún no hay insumos registrados',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

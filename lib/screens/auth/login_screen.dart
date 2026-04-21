@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/auth/auth_service.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (email.isEmpty || password.isEmpty) {
       _showSnackBar(
-        'Completa correo y contrasena para continuar.',
+        'Completa correo y contraseña para continuar.',
         AppColors.clayStrong,
       );
       return;
@@ -40,14 +39,13 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (response['success'] == true) {
-        await SyncService.syncAll();
         _showSnackBar('Ingreso exitoso.', AppColors.success);
         Navigator.pushReplacementNamed(context, '/home');
         return;
       }
 
       _showSnackBar(
-        response['message']?.toString() ?? 'No fue posible iniciar sesion.',
+        response['message']?.toString() ?? 'No fue posible iniciar sesión.',
         AppColors.danger,
       );
     } catch (error) {
@@ -55,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       _showSnackBar(
-        'Ocurrio un error al iniciar sesion: $error',
+        'Ocurrió un error al iniciar sesión: $error',
         AppColors.danger,
       );
     } finally {
@@ -185,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 12),
                               const Text(
-                                'Inicia sesion para continuar.',
+                                'Inicia sesión para continuar.',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: AppColors.textSecondary,
@@ -194,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 36),
                               _InputField(
                                 controller: _emailController,
-                                label: 'Correo electronico',
+                                label: 'Correo electrónico',
                                 hint: 'tu@empresa.com',
                                 icon: Icons.alternate_email_rounded,
                                 keyboardType: TextInputType.emailAddress,
@@ -203,8 +201,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 20),
                               _InputField(
                                 controller: _passwordController,
-                                label: 'Contrasena',
-                                hint: 'Escribe tu contrasena',
+                                label: 'Contraseña',
+                                hint: 'Escribe tu contraseña',
                                 icon: Icons.lock_outline_rounded,
                                 obscureText: _obscurePassword,
                                 textInputAction: TextInputAction.done,

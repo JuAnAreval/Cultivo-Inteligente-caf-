@@ -2,7 +2,7 @@ import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class InsumoService {
   static Future<Map<String, dynamic>> getAll({
@@ -10,8 +10,6 @@ class InsumoService {
     int limit = 100,
     String search = '',
   }) async {
-    await SyncService.syncAll();
-
     var insumos = await DatabaseHelper().getVisibleInsumos();
 
     if (search.trim().isNotEmpty) {
@@ -70,8 +68,8 @@ class InsumoService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getInsumoByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -110,8 +108,8 @@ class InsumoService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getInsumoByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -140,7 +138,8 @@ class InsumoService {
       });
     }
 
-    await SyncService.syncAll();
+    await PendingSyncService.refreshPendingCount();
+
     return {'success': true, 'source': 'local'};
   }
 
@@ -172,7 +171,7 @@ class InsumoService {
     String id,
     Map<String, dynamic> data,
   ) async {
-    return HttpClient.patch('${ApiConfig.insumoUrl}/$id', data);
+    return HttpClient.put('${ApiConfig.insumoUrl}/$id', data);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {
@@ -188,16 +187,32 @@ class InsumoService {
   }
 
   static Map<String, dynamic> toRemotePayload(Map<String, dynamic> data) {
-    return {
+    final payload = <String, dynamic>{
       'id_lote':
           data['lote_remote_id']?.toString() ?? data['id_lote']?.toString(),
-      'insumo': data['insumo']?.toString(),
-      'ingredientes_activos': data['ingredientes_activos']?.toString(),
-      'fecha': data['fecha']?.toString(),
-      'tipo': data['tipo']?.toString(),
-      'origen': data['origen']?.toString(),
-      'factura': data['factura']?.toString(),
+      'insumo': _cleanText(data['insumo']),
+      'ingredientes_activos': _cleanText(data['ingredientes_activos']),
+      'fecha': _cleanText(data['fecha']),
+      'tipo': _normalizeTipo(data['tipo']),
+      'origen': _normalizeOrigen(data['origen']),
     };
+
+    final factura = _cleanText(data['factura']);
+    if (factura.isNotEmpty) {
+      payload['factura'] = factura;
+    }
+
+    payload.removeWhere((key, value) {
+      if (value == null) {
+        return true;
+      }
+      if (value is String) {
+        return value.trim().isEmpty;
+      }
+      return false;
+    });
+
+    return payload;
   }
 
   static Map<String, dynamic> _toViewMap(Map<String, dynamic> row) {
@@ -221,4 +236,24 @@ class InsumoService {
   }
 
   static int? toInt(dynamic value) => DatabaseHelper.toInt(value);
+
+  static String _cleanText(dynamic value) {
+    return value?.toString().trim() ?? '';
+  }
+
+  static String _normalizeTipo(dynamic value) {
+    final normalized = _cleanText(value).toLowerCase();
+    if (normalized.contains('organ')) {
+      return 'organico';
+    }
+    return 'convencional';
+  }
+
+  static String _normalizeOrigen(dynamic value) {
+    final normalized = _cleanText(value).toLowerCase();
+    if (normalized.contains('prop')) {
+      return 'propio';
+    }
+    return 'comprado';
+  }
 }

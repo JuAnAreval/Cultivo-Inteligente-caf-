@@ -40,6 +40,7 @@ class MainActivity: FlutterActivity() {
                             result.success("Initialized")
                         } catch (e: Exception) {
                             initializedModelPath = null
+                            llmInference = null
                             result.error("INIT_FAILED", e.message, null)
                         }
                     } else {

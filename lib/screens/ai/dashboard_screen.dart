@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app_flutter_ai/core/config/ai_model_config.dart';
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/models/task_model.dart';
 import 'package:app_flutter_ai/core/providers/task_provider.dart';
@@ -19,9 +20,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  static const String _modelFileName = 'qwen_2_5_1_5b.task';
-  static const String _modelUrl =
-      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+  static const String _modelFileName = AiModelConfig.modelFileName;
+  static const String _modelUrl = AiModelConfig.modelUrl;
 
   final LlmService _llmService = LlmService();
   final Dio _dio = Dio();
@@ -78,13 +78,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<File> _getModelFile() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final modelDir = Directory('${supportDir.path}/ai_models');
-    if (!await modelDir.exists()) {
-      await modelDir.create(recursive: true);
+    final externalDir = await getExternalStorageDirectory();
+    if (externalDir != null) {
+      return File('${externalDir.path}/$_modelFileName');
     }
 
-    return File('${modelDir.path}/$_modelFileName');
+    final supportDir = await getApplicationSupportDirectory();
+    return File('${supportDir.path}/$_modelFileName');
   }
 
   Future<bool> _tryInitModel(String path) async {
@@ -130,6 +130,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       options: Options(
         receiveTimeout: const Duration(minutes: 30),
         sendTimeout: const Duration(minutes: 2),
+        headers: const {
+          'accept': '*/*',
+          'user-agent': 'app_flutter_ai/1.0',
+        },
       ),
       onReceiveProgress: (received, total) {
         if (!mounted || total <= 0) {

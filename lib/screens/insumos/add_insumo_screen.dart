@@ -148,7 +148,7 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Este registro quedara asociado al lote ${widget.lotName} de la finca ${widget.farmName}.',
+                      'Este registro quedará asociado al lote ${widget.lotName} de la finca ${widget.farmName}.',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         height: 1.5,
@@ -195,7 +195,7 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
                             items: const [
                               DropdownMenuItem(
                                 value: 'organico',
-                                child: Text('Organico'),
+                                child: Text('Orgánico'),
                               ),
                               DropdownMenuItem(
                                 value: 'convencional',

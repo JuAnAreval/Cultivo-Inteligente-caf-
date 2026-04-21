@@ -1,35 +1,272 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:app_flutter_ai/core/services/actividades/actividad_campo_service.dart';
 import 'package:app_flutter_ai/core/services/cosechas/cosecha_service.dart';
 import 'package:app_flutter_ai/core/services/fincas/finca_service.dart';
 import 'package:app_flutter_ai/core/services/insumos/insumo_servies.dart';
 import 'package:app_flutter_ai/core/services/lotes/lote_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
+import 'package:app_flutter_ai/core/services/shared/http_client.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class SyncService {
-  static bool _isSyncing = false;
+  static const Duration _cooldown = Duration(minutes: 2);
+  static const String _scopeAll = 'all';
+  static const String _scopePending = 'pending';
+  static const String _scopeFincas = 'fincas';
+  static const String _scopeLotes = 'lotes';
+  static const String _scopeActividades = 'actividades';
+  static const String _scopeInsumos = 'insumos';
+  static const String _scopeCosechas = 'cosechas';
 
-  static Future<void> syncAll() async {
-    if (_isSyncing) {
+  static final Map<String, DateTime> _lastSyncAtByScope = {};
+  static Future<void>? _activeSync;
+  static String? _activeScope;
+  static String? _lastIssueMessage;
+
+  static String? get lastIssueMessage => _lastIssueMessage;
+
+  static Future<void> syncAll({bool force = false}) {
+    return _runSync(
+      scope: _scopeAll,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+        await _pullFincas();
+        await _pullLotes();
+        await _pullActividades();
+        await _pullInsumos();
+        await _pullCosechas();
+      },
+      scopesToMark: const [
+        _scopeAll,
+        _scopeFincas,
+        _scopeLotes,
+        _scopeActividades,
+        _scopeInsumos,
+        _scopeCosechas,
+      ],
+    );
+  }
+
+  static Future<void> syncPendingChanges({bool force = false}) {
+    return _runSync(
+      scope: _scopePending,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+      },
+      scopesToMark: const [_scopePending],
+    );
+  }
+
+  static Future<void> syncFincas({bool force = false}) {
+    return _runSync(
+      scope: _scopeFincas,
+      force: force,
+      action: () async {
+        await _pushPendingFincas();
+        await _pullFincas();
+      },
+      scopesToMark: const [_scopeFincas],
+    );
+  }
+
+  static Future<void> syncLotes({bool force = false}) {
+    return _runSync(
+      scope: _scopeLotes,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+        await _pullLotes();
+      },
+      scopesToMark: const [_scopeLotes],
+    );
+  }
+
+  static Future<void> syncActividades({bool force = false}) {
+    return _runSync(
+      scope: _scopeActividades,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+        await _pullActividades();
+      },
+      scopesToMark: const [_scopeActividades],
+    );
+  }
+
+  static Future<void> syncInsumos({bool force = false}) {
+    return _runSync(
+      scope: _scopeInsumos,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+        await _pullInsumos();
+      },
+      scopesToMark: const [_scopeInsumos],
+    );
+  }
+
+  static Future<void> syncCosechas({bool force = false}) {
+    return _runSync(
+      scope: _scopeCosechas,
+      force: force,
+      action: () async {
+        await _pushPendingUntilSettled();
+        await _pullCosechas();
+      },
+      scopesToMark: const [_scopeCosechas],
+    );
+  }
+
+  static Future<void> _pushPendingUntilSettled({int maxRounds = 3}) async {
+    final database = DatabaseHelper();
+    var previousCount = await database.getPendingChangesCount();
+
+    if (previousCount <= 0) {
       return;
     }
 
-    _isSyncing = true;
-    try {
+    for (var round = 0; round < maxRounds; round++) {
+      _log('ROUND', 'push pendientes ${round + 1}/$maxRounds');
+
       await _pushPendingFincas();
       await _pushPendingLotes();
       await _pushPendingActividades();
       await _pushPendingInsumos();
       await _pushPendingCosechas();
-      await _pullFincas();
-      await _pullLotes();
-      await _pullActividades();
-      await _pullInsumos();
-      await _pullCosechas();
-    } catch (_) {
-      // El flujo offline debe seguir funcionando aunque la sincronizacion falle.
-    } finally {
-      _isSyncing = false;
+
+      final currentCount = await database.getPendingChangesCount();
+      _log('PENDING', 'antes: $previousCount, despues: $currentCount');
+
+      if (currentCount <= 0) {
+        return;
+      }
+
+      if (currentCount >= previousCount) {
+        return;
+      }
+
+      previousCount = currentCount;
     }
+  }
+
+  static Future<void> _runSync({
+    required String scope,
+    required Future<void> Function() action,
+    required List<String> scopesToMark,
+    bool force = false,
+  }) async {
+    if (_activeSync != null) {
+      _log('WAIT', '$scope espera a $_activeScope');
+      await _activeSync;
+    }
+
+    if (!force && _isInCooldown(scope)) {
+      _log('SKIP', '$scope omitida por cooldown');
+      return;
+    }
+
+    final syncFuture = _executeSync(
+      scope: scope,
+      action: action,
+      scopesToMark: scopesToMark,
+      force: force,
+    );
+    _activeSync = syncFuture;
+    _activeScope = scope;
+
+    try {
+      await syncFuture;
+    } finally {
+      if (identical(_activeSync, syncFuture)) {
+        _activeSync = null;
+        _activeScope = null;
+      }
+    }
+  }
+
+  static Future<void> _executeSync({
+    required String scope,
+    required Future<void> Function() action,
+    required List<String> scopesToMark,
+    required bool force,
+  }) async {
+    _lastIssueMessage = null;
+    _log(
+      'START',
+      '$scope${force ? ' (force)' : ''}',
+    );
+
+    try {
+      await action();
+      final now = DateTime.now();
+      for (final scopeToMark in scopesToMark) {
+        _lastSyncAtByScope[scopeToMark] = now;
+      }
+      await PendingSyncService.refreshPendingCount();
+      _log('DONE', scope);
+    } catch (error, stackTrace) {
+      _lastIssueMessage = _buildIssueMessage(error);
+      if (kDebugMode) {
+        debugPrint('[SYNC ERROR] $scope -> $error');
+        debugPrint('$stackTrace');
+      }
+      await PendingSyncService.refreshPendingCount();
+      // El flujo offline debe seguir funcionando aunque la sincronizacion falle.
+    }
+  }
+
+  static bool _isInCooldown(String scope) {
+    final now = DateTime.now();
+    final lastScopeSync = _lastSyncAtByScope[scope];
+    if (lastScopeSync != null && now.difference(lastScopeSync) < _cooldown) {
+      return true;
+    }
+
+    if (scope == _scopeAll) {
+      return false;
+    }
+
+    final lastGlobalSync = _lastSyncAtByScope[_scopeAll];
+    if (lastGlobalSync != null && now.difference(lastGlobalSync) < _cooldown) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static void _log(String stage, String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    debugPrint('[SYNC $stage] $message');
+  }
+
+  static bool _isAuthenticationError(Object error) {
+    return error is SessionUnavailableException ||
+        (error is ApiRequestException && error.statusCode == 401);
+  }
+
+  static bool _isConnectionError(Object error) {
+    return error is NoConnectionException;
+  }
+
+  static String? _buildIssueMessage(Object error) {
+    if (error is NoConnectionException) {
+      return error.message;
+    }
+
+    if (error is SessionUnavailableException) {
+      return error.message;
+    }
+
+    if (error is ApiRequestException && error.statusCode == 401) {
+      return 'El servidor rechazo la sesion para sincronizar. Tus datos siguen guardados localmente.';
+    }
+
+    return null;
   }
 
   static Future<void> _pushPendingFincas() async {
@@ -58,11 +295,9 @@ class SyncService {
 
           await database.updateLocalFinca(localId, {
             'remote_id': remoteRecord['id']?.toString(),
-            'created_by':
-                FincaService.toInt(remoteRecord['createdBy']) ??
+            'created_by': FincaService.toInt(remoteRecord['createdBy']) ??
                 FincaService.toInt(finca['created_by']),
-            'workspace_id':
-                remoteRecord['workspaceId']?.toString() ??
+            'workspace_id': remoteRecord['workspaceId']?.toString() ??
                 finca['workspace_id']?.toString(),
             'sync_status': DatabaseHelper.synced,
             'last_synced_at': DateTime.now().toIso8601String(),
@@ -90,6 +325,9 @@ class SyncService {
         await database.updateLocalFinca(localId, {
           'last_error': error.toString(),
         });
+        if (_isAuthenticationError(error) || _isConnectionError(error)) {
+          rethrow;
+        }
       }
     }
   }
@@ -143,11 +381,9 @@ class SyncService {
             'remote_id': remoteRecord['id']?.toString(),
             'finca_remote_id':
                 remoteRecord['id_finca']?.toString() ?? fincaRemoteId,
-            'created_by':
-                LoteService.toInt(remoteRecord['createdBy']) ??
+            'created_by': LoteService.toInt(remoteRecord['createdBy']) ??
                 LoteService.toInt(lote['created_by']),
-            'workspace_id':
-                remoteRecord['workspaceId']?.toString() ??
+            'workspace_id': remoteRecord['workspaceId']?.toString() ??
                 lote['workspace_id']?.toString(),
             'sync_status': DatabaseHelper.synced,
             'last_synced_at': DateTime.now().toIso8601String(),
@@ -181,6 +417,9 @@ class SyncService {
         await database.updateLocalLote(localId, {
           'last_error': error.toString(),
         });
+        if (_isAuthenticationError(error) || _isConnectionError(error)) {
+          rethrow;
+        }
       }
     }
   }
@@ -206,7 +445,8 @@ class SyncService {
 
         var loteRemoteId = actividad['lote_remote_id']?.toString();
         if (loteRemoteId == null || loteRemoteId.isEmpty) {
-          final loteLocalId = ActividadCampoService.toInt(actividad['lote_local_id']);
+          final loteLocalId =
+              ActividadCampoService.toInt(actividad['lote_local_id']);
           if (loteLocalId != null) {
             final lote = await database.getLoteByLocalId(loteLocalId);
             loteRemoteId = lote?['remote_id']?.toString();
@@ -235,11 +475,9 @@ class SyncService {
             'remote_id': remoteRecord['id']?.toString(),
             'lote_remote_id':
                 remoteRecord['id_lote']?.toString() ?? loteRemoteId,
-            'created_by':
-                DatabaseHelper.toInt(remoteRecord['createdBy']) ??
+            'created_by': DatabaseHelper.toInt(remoteRecord['createdBy']) ??
                 DatabaseHelper.toInt(actividad['created_by']),
-            'workspace_id':
-                remoteRecord['workspaceId']?.toString() ??
+            'workspace_id': remoteRecord['workspaceId']?.toString() ??
                 actividad['workspace_id']?.toString(),
             'sync_status': DatabaseHelper.synced,
             'last_synced_at': DateTime.now().toIso8601String(),
@@ -273,6 +511,9 @@ class SyncService {
         await database.updateLocalActividad(localId, {
           'last_error': error.toString(),
         });
+        if (_isAuthenticationError(error) || _isConnectionError(error)) {
+          rethrow;
+        }
       }
     }
   }
@@ -326,11 +567,9 @@ class SyncService {
             'remote_id': remoteRecord['id']?.toString(),
             'lote_remote_id':
                 remoteRecord['id_lote']?.toString() ?? loteRemoteId,
-            'created_by':
-                DatabaseHelper.toInt(remoteRecord['createdBy']) ??
+            'created_by': DatabaseHelper.toInt(remoteRecord['createdBy']) ??
                 DatabaseHelper.toInt(insumo['created_by']),
-            'workspace_id':
-                remoteRecord['workspaceId']?.toString() ??
+            'workspace_id': remoteRecord['workspaceId']?.toString() ??
                 insumo['workspace_id']?.toString(),
             'sync_status': DatabaseHelper.synced,
             'last_synced_at': DateTime.now().toIso8601String(),
@@ -364,6 +603,9 @@ class SyncService {
         await database.updateLocalInsumo(localId, {
           'last_error': error.toString(),
         });
+        if (_isAuthenticationError(error) || _isConnectionError(error)) {
+          rethrow;
+        }
       }
     }
   }
@@ -375,7 +617,8 @@ class SyncService {
     for (final cosecha in pending) {
       final localId = (cosecha['local_id'] as num).toInt();
       final remoteId = cosecha['remote_id']?.toString();
-      final status = cosecha['sync_status']?.toString() ?? DatabaseHelper.synced;
+      final status =
+          cosecha['sync_status']?.toString() ?? DatabaseHelper.synced;
 
       try {
         if (status == DatabaseHelper.pendingDelete) {
@@ -417,11 +660,9 @@ class SyncService {
             'remote_id': remoteRecord['id']?.toString(),
             'finca_remote_id':
                 remoteRecord['id_finca']?.toString() ?? fincaRemoteId,
-            'created_by':
-                DatabaseHelper.toInt(remoteRecord['createdBy']) ??
+            'created_by': DatabaseHelper.toInt(remoteRecord['createdBy']) ??
                 DatabaseHelper.toInt(cosecha['created_by']),
-            'workspace_id':
-                remoteRecord['workspaceId']?.toString() ??
+            'workspace_id': remoteRecord['workspaceId']?.toString() ??
                 cosecha['workspace_id']?.toString(),
             'sync_status': DatabaseHelper.synced,
             'last_synced_at': DateTime.now().toIso8601String(),
@@ -455,6 +696,9 @@ class SyncService {
         await database.updateLocalCosecha(localId, {
           'last_error': error.toString(),
         });
+        if (_isAuthenticationError(error) || _isConnectionError(error)) {
+          rethrow;
+        }
       }
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app_flutter_ai/core/config/ai_model_config.dart';
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
 import 'package:app_flutter_ai/core/services/insumos/insumo_ai_service.dart';
@@ -26,9 +27,8 @@ class InsumoAiChatScreen extends StatefulWidget {
 }
 
 class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
-  static const String _modelFileName = 'qwen_2_5_1_5b.task';
-  static const String _modelUrl =
-      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+  static const String _modelFileName = AiModelConfig.modelFileName;
+  static const String _modelUrl = AiModelConfig.modelUrl;
 
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _insumoController = TextEditingController();
@@ -66,6 +66,7 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
 
   @override
   void dispose() {
+    _speech.stop();
     _messageController.dispose();
     _insumoController.dispose();
     _ingredientesController.dispose();
@@ -114,12 +115,13 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
   }
 
   Future<File> _getModelFile() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final modelDir = Directory('${supportDir.path}/ai_models');
-    if (!await modelDir.exists()) {
-      await modelDir.create(recursive: true);
+    final externalDir = await getExternalStorageDirectory();
+    if (externalDir != null) {
+      return File('${externalDir.path}/$_modelFileName');
     }
-    return File('${modelDir.path}/$_modelFileName');
+
+    final supportDir = await getApplicationSupportDirectory();
+    return File('${supportDir.path}/$_modelFileName');
   }
 
   Future<bool> _tryInitModel(String path) async {
@@ -160,6 +162,10 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
       options: Options(
         receiveTimeout: const Duration(minutes: 30),
         sendTimeout: const Duration(minutes: 2),
+        headers: const {
+          'accept': '*/*',
+          'user-agent': 'app_flutter_ai/1.0',
+        },
       ),
       onReceiveProgress: (received, total) {
         if (!mounted || total <= 0) {
@@ -263,11 +269,28 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
     _messageController.clear();
     _scrollToBottom();
 
-    final draft = await _insumoAiService.generateDraft(
-      command: command,
-      lotName: widget.lotName,
-      farmName: widget.farmName,
-    );
+    Map<String, dynamic>? draft;
+    try {
+      draft = await _insumoAiService.generateDraft(
+        command: command,
+        lotName: widget.lotName,
+        farmName: widget.farmName,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(
+          _ChatMessage.system(
+            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripcion mas corta.',
+          ),
+        );
+        _isProcessing = false;
+      });
+      _scrollToBottom();
+      return;
+    }
 
     if (!mounted) {
       return;
@@ -286,22 +309,26 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
       return;
     }
 
-    if (draft['error'] != null) {
+    final safeDraft = draft;
+
+    if (safeDraft['error'] != null) {
       setState(() {
-        _messages.add(_ChatMessage.system((draft['error'] ?? '').toString()));
+        _messages.add(
+          _ChatMessage.system((safeDraft['error'] ?? '').toString()),
+        );
         _isProcessing = false;
       });
       _scrollToBottom();
       return;
     }
 
-    _insumoController.text = (draft['insumo'] ?? '').toString();
+    _insumoController.text = (safeDraft['insumo'] ?? '').toString();
     _ingredientesController.text =
-        (draft['ingredientes_activos'] ?? '').toString();
-    _fechaController.text = (draft['fecha'] ?? '').toString();
-    _tipo = (draft['tipo'] ?? 'organico').toString();
-    _origen = (draft['origen'] ?? 'propio').toString();
-    _facturaController.text = (draft['factura'] ?? '').toString();
+        (safeDraft['ingredientes_activos'] ?? '').toString();
+    _fechaController.text = (safeDraft['fecha'] ?? '').toString();
+    _tipo = (safeDraft['tipo'] ?? 'organico').toString();
+    _origen = (safeDraft['origen'] ?? 'propio').toString();
+    _facturaController.text = (safeDraft['factura'] ?? '').toString();
 
     setState(() {
       _hasDraft = true;
@@ -405,6 +432,18 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
                 _CompactHeaderCard(
                   farmName: widget.farmName,
                   lotName: widget.lotName,
+                ),
+                const SizedBox(height: 12),
+                const _RequiredDataCard(
+                  title: 'Datos que necesito',
+                  items: [
+                    'Nombre del insumo',
+                    'Ingredientes activos',
+                    'Fecha',
+                    'Tipo, por ejemplo organico o convencional',
+                    'Origen, propio o comprado',
+                    'Factura, si la tienes',
+                  ],
                 ),
                 const SizedBox(height: 12),
                 if (isBlocked)
@@ -669,6 +708,71 @@ class _IntroCard extends StatelessWidget {
           Text(
             'Compre fungicida score para el lote, ingrediente activo difenoconazol, factura 12345.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequiredDataCard extends StatelessWidget {
+  const _RequiredDataCard({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.moss,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

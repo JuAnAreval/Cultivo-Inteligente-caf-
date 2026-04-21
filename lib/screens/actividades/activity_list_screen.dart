@@ -48,6 +48,9 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _activitiesFuture = _loadActivities();
     });
@@ -548,7 +551,7 @@ class _EmptyActivityCard extends StatelessWidget {
           ),
           SizedBox(height: 14),
           Text(
-            'Aun no hay actividades',
+            'Aún no hay actividades',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,

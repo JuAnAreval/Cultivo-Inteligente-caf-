@@ -2,7 +2,7 @@ import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class LoteService {
   static Future<Map<String, dynamic>> getAll({
@@ -10,8 +10,6 @@ class LoteService {
     int limit = 100,
     String search = '',
   }) async {
-    await SyncService.syncAll();
-
     var lotes = await DatabaseHelper().getVisibleLotes();
 
     if (search.trim().isNotEmpty) {
@@ -65,8 +63,8 @@ class LoteService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getLoteByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
 
     return {
       'success': true,
@@ -104,8 +102,8 @@ class LoteService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getLoteByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
 
     return {
       'success': true,
@@ -135,7 +133,8 @@ class LoteService {
       });
     }
 
-    await SyncService.syncAll();
+    await PendingSyncService.refreshPendingCount();
+
     return {'success': true, 'source': 'local'};
   }
 
@@ -170,7 +169,7 @@ class LoteService {
     String id,
     Map<String, dynamic> lote,
   ) async {
-    return HttpClient.patch('${ApiConfig.loteUrl}/$id', lote);
+    return HttpClient.put('${ApiConfig.loteUrl}/$id', lote);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {

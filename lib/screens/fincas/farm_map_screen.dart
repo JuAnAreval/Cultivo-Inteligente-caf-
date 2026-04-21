@@ -2,6 +2,7 @@ import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/fincas/device_location_service.dart';
 import 'package:app_flutter_ai/core/services/fincas/finca_service.dart';
+import 'package:app_flutter_ai/screens/cosechas/cosecha_list_screen.dart';
 import 'package:app_flutter_ai/screens/lotes/lot_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -73,6 +74,9 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _didAutoFocus = false;
       _showFarmList = false;
@@ -192,6 +196,24 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => LotListScreen(
+          farmId: farmId,
+          farmName: farmName,
+        ),
+      ),
+    );
+  }
+
+  void _openCosechas(Map<String, dynamic> farm) {
+    final farmId = (farm['id'] ?? '').toString();
+    final farmName = (farm['nombre'] ?? 'Finca').toString();
+    if (farmId.isEmpty) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CosechaListScreen(
           farmId: farmId,
           farmName: farmName,
         ),
@@ -343,9 +365,9 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                 bottom: bottomInset,
                 child: const _StatusCard(
                   icon: Icons.home_work_outlined,
-                  title: 'Aun no hay fincas para mostrar',
+                  title: 'Aún no hay fincas para mostrar',
                   subtitle:
-                      'Cuando registres fincas con coordenadas, apareceran aqui sobre el mapa.',
+                      'Cuando registres fincas con coordenadas, aparecerán aquí sobre el mapa.',
                 ),
               )
             else ...[
@@ -373,6 +395,7 @@ class _FarmMapScreenState extends State<FarmMapScreen> {
                   child: _SelectedFarmCard(
                     farm: _selectedFarm!,
                     onOpenLots: () => _openLots(_selectedFarm!),
+                    onOpenCosechas: () => _openCosechas(_selectedFarm!),
                     onClose: () {
                       setState(() => _selectedFarm = null);
                     },
@@ -612,7 +635,7 @@ class _FarmListSheet extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  (farm['ubicacion_texto'] ?? 'Sin ubicacion')
+                                  (farm['ubicacion_texto'] ?? 'Sin ubicación')
                                       .toString(),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -635,7 +658,7 @@ class _FarmListSheet extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
-                                '$area ha',
+                                '$area hectareas',
                                 style: const TextStyle(
                                   color: AppColors.soil,
                                   fontWeight: FontWeight.w700,
@@ -661,20 +684,20 @@ class _SelectedFarmCard extends StatelessWidget {
   const _SelectedFarmCard({
     required this.farm,
     required this.onOpenLots,
+    required this.onOpenCosechas,
     required this.onClose,
   });
 
   final Map<String, dynamic> farm;
   final VoidCallback onOpenLots;
+  final VoidCallback onOpenCosechas;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final nombre = (farm['nombre'] ?? 'Finca').toString();
-    final ubicacion = (farm['ubicacion_texto'] ?? 'Sin ubicacion').toString();
+    final ubicacion = (farm['ubicacion_texto'] ?? 'Sin ubicación').toString();
     final area = (farm['area_hectareas'] ?? '').toString();
-    final latitud = (farm['latitud'] ?? '').toString();
-    final longitud = (farm['longitud'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -744,31 +767,44 @@ class _SelectedFarmCard extends StatelessWidget {
               if (area.isNotEmpty)
                 _FarmInfoChip(
                   icon: Icons.crop_landscape_rounded,
-                  text: '$area ha',
+                  text: '$area hectareas',
                 ),
-              _FarmInfoChip(
-                icon: Icons.my_location_rounded,
-                text: latitud.isEmpty ? 'Sin latitud' : latitud,
-              ),
-              _FarmInfoChip(
-                icon: Icons.explore_rounded,
-                text: longitud.isEmpty ? 'Sin longitud' : longitud,
-              ),
+              if (area.isEmpty)
+                const _FarmInfoChip(
+                  icon: Icons.crop_landscape_rounded,
+                  text: 'Area no definida',
+                ),
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onOpenLots,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.moss,
-                foregroundColor: AppColors.surface,
-                padding: const EdgeInsets.symmetric(vertical: 15),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onOpenLots,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.moss,
+                    foregroundColor: AppColors.surface,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  icon: const Icon(Icons.grid_view_rounded),
+                  label: const Text('Lotes'),
+                ),
               ),
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Entrar a lotes'),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onOpenCosechas,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.clayStrong,
+                    side: const BorderSide(color: AppColors.sand),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  icon: const Icon(Icons.agriculture_rounded),
+                  label: const Text('Cosechas'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

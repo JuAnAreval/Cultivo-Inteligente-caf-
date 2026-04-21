@@ -2,7 +2,7 @@ import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class FincaService {
   static Future<Map<String, dynamic>> getAll({
@@ -10,8 +10,6 @@ class FincaService {
     int limit = 50,
     String search = '',
   }) async {
-    await SyncService.syncAll();
-
     final currentUserId = SessionService.userId;
     var fincas = await DatabaseHelper().getVisibleFincas(createdBy: currentUserId);
 
@@ -70,8 +68,8 @@ class FincaService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getFincaByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
 
     return {
       'success': true,
@@ -110,8 +108,8 @@ class FincaService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getFincaByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
 
     return {
       'success': true,
@@ -141,7 +139,8 @@ class FincaService {
       });
     }
 
-    await SyncService.syncAll();
+    await PendingSyncService.refreshPendingCount();
+
     return {'success': true, 'source': 'local'};
   }
 
@@ -176,7 +175,7 @@ class FincaService {
     String id,
     Map<String, dynamic> finca,
   ) async {
-    return HttpClient.patch('${ApiConfig.fincaUrl}/$id', finca);
+    return HttpClient.put('${ApiConfig.fincaUrl}/$id', finca);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {

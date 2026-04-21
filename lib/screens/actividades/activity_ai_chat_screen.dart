@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app_flutter_ai/core/config/ai_model_config.dart';
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/actividades/activity_ai_service.dart';
 import 'package:app_flutter_ai/core/services/actividades/actividad_campo_service.dart';
@@ -26,9 +27,8 @@ class ActivityAiChatScreen extends StatefulWidget {
 }
 
 class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
-  static const String _modelFileName = 'qwen_2_5_1_5b.task';
-  static const String _modelUrl =
-      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task';
+  static const String _modelFileName = AiModelConfig.modelFileName;
+  static const String _modelUrl = AiModelConfig.modelUrl;
 
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _fechaController = TextEditingController();
@@ -67,6 +67,7 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
 
   @override
   void dispose() {
+    _speech.stop();
     _messageController.dispose();
     _fechaController.dispose();
     _actividadController.dispose();
@@ -116,12 +117,13 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
   }
 
   Future<File> _getModelFile() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final modelDir = Directory('${supportDir.path}/ai_models');
-    if (!await modelDir.exists()) {
-      await modelDir.create(recursive: true);
+    final externalDir = await getExternalStorageDirectory();
+    if (externalDir != null) {
+      return File('${externalDir.path}/$_modelFileName');
     }
-    return File('${modelDir.path}/$_modelFileName');
+
+    final supportDir = await getApplicationSupportDirectory();
+    return File('${supportDir.path}/$_modelFileName');
   }
 
   Future<bool> _tryInitModel(String path) async {
@@ -162,6 +164,10 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       options: Options(
         receiveTimeout: const Duration(minutes: 30),
         sendTimeout: const Duration(minutes: 2),
+        headers: const {
+          'accept': '*/*',
+          'user-agent': 'app_flutter_ai/1.0',
+        },
       ),
       onReceiveProgress: (received, total) {
         if (!mounted || total <= 0) {
@@ -265,11 +271,28 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
     _messageController.clear();
     _scrollToBottom();
 
-    final draft = await _activityAiService.generateDraft(
-      command: command,
-      lotName: widget.lotName,
-      farmName: widget.farmName,
-    );
+    Map<String, dynamic>? draft;
+    try {
+      draft = await _activityAiService.generateDraft(
+        command: command,
+        lotName: widget.lotName,
+        farmName: widget.farmName,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(
+          _ChatMessage.system(
+            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripcion mas corta.',
+          ),
+        );
+        _isProcessing = false;
+      });
+      _scrollToBottom();
+      return;
+    }
 
     if (!mounted) {
       return;
@@ -288,10 +311,12 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       return;
     }
 
-    if (draft['error'] != null) {
+    final safeDraft = draft;
+
+    if (safeDraft['error'] != null) {
       setState(() {
         _messages.add(
-          _ChatMessage.system((draft['error'] ?? '').toString()),
+          _ChatMessage.system((safeDraft['error'] ?? '').toString()),
         );
         _isProcessing = false;
       });
@@ -299,12 +324,12 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       return;
     }
 
-    _fechaController.text = (draft['fecha'] ?? '').toString();
-    _actividadController.text = (draft['actividad'] ?? '').toString();
-    _aplicacionesController.text = (draft['aplicaciones'] ?? '').toString();
-    _dosisController.text = (draft['dosis'] ?? '').toString();
+    _fechaController.text = (safeDraft['fecha'] ?? '').toString();
+    _actividadController.text = (safeDraft['actividad'] ?? '').toString();
+    _aplicacionesController.text = (safeDraft['aplicaciones'] ?? '').toString();
+    _dosisController.text = (safeDraft['dosis'] ?? '').toString();
     _observacionesController.text =
-        (draft['observaciones_responsable'] ?? '').toString();
+        (safeDraft['observaciones_responsable'] ?? '').toString();
 
     setState(() {
       _hasDraft = true;
@@ -407,6 +432,17 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
                 _CompactHeaderCard(
                   farmName: widget.farmName,
                   lotName: widget.lotName,
+                ),
+                const SizedBox(height: 12),
+                const _RequiredDataCard(
+                  title: 'Datos que necesito',
+                  items: [
+                    'Fecha de la actividad',
+                    'Que trabajo se realizo',
+                    'Aplicaciones o productos usados',
+                    'Dosis, si aplica',
+                    'Observaciones o responsable',
+                  ],
                 ),
                 const SizedBox(height: 12),
                 if (isBlocked)
@@ -658,6 +694,71 @@ class _ActivityIntroCard extends StatelessWidget {
           Text(
             'Ayer hubo poda sanitaria, sin aplicaciones, observacion: faltan herramientas.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequiredDataCard extends StatelessWidget {
+  const _RequiredDataCard({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.moss,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

@@ -2,7 +2,7 @@ import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
-import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
 
 class ActividadCampoService {
   static Future<Map<String, dynamic>> getAll({
@@ -10,8 +10,6 @@ class ActividadCampoService {
     int limit = 100,
     String search = '',
   }) async {
-    await SyncService.syncAll();
-
     var actividades = await DatabaseHelper().getVisibleActividades();
 
     if (search.trim().isNotEmpty) {
@@ -74,8 +72,8 @@ class ActividadCampoService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getActividadByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -114,8 +112,8 @@ class ActividadCampoService {
       'last_error': null,
     });
 
-    await SyncService.syncAll();
     final saved = await DatabaseHelper().getActividadByLocalId(localId);
+    await PendingSyncService.refreshPendingCount();
     return {
       'success': true,
       'data': saved == null ? null : _toViewMap(saved),
@@ -144,7 +142,8 @@ class ActividadCampoService {
       });
     }
 
-    await SyncService.syncAll();
+    await PendingSyncService.refreshPendingCount();
+
     return {'success': true, 'source': 'local'};
   }
 
@@ -176,7 +175,7 @@ class ActividadCampoService {
     String id,
     Map<String, dynamic> data,
   ) async {
-    return HttpClient.patch('${ApiConfig.actividadUrl}/$id', data);
+    return HttpClient.put('${ApiConfig.actividadUrl}/$id', data);
   }
 
   static Future<Map<String, dynamic>> deleteRemote(String id) async {

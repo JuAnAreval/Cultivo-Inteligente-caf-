@@ -338,35 +338,15 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FarmTextField(
-                            controller: _latitudController,
-                            label: 'Latitud',
-                            hint: 'Se completa desde el mapa',
-                            icon: Icons.my_location_rounded,
-                            readOnly: true,
-                            validator: _validateDecimal,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FarmTextField(
-                            controller: _longitudController,
-                            label: 'Longitud',
-                            hint: 'Se completa desde el mapa',
-                            icon: Icons.explore_rounded,
-                            readOnly: true,
-                            validator: _validateDecimal,
-                          ),
-                        ),
-                      ],
+                    _LocationStatusCard(
+                      hasSelectedPoint:
+                          _latitudController.text.trim().isNotEmpty &&
+                          _longitudController.text.trim().isNotEmpty,
                     ),
                     const SizedBox(height: 16),
                     _FarmTextField(
                       controller: _areaController,
-                      label: 'Area hectareas',
+                      label: 'Area en hectareas',
                       hint: 'Ej: 12.5',
                       icon: Icons.crop_landscape_rounded,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -381,8 +361,6 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
               _PreviewCard(
                 nombre: _nombreController.text,
                 ubicacion: _ubicacionController.text,
-                latitud: _latitudController.text,
-                longitud: _longitudController.text,
                 area: _areaController.text,
               ),
               const SizedBox(height: 18),
@@ -618,7 +596,6 @@ class _FarmTextField extends StatelessWidget {
     required this.icon,
     this.keyboardType,
     this.maxLines = 1,
-    this.readOnly = false,
     this.validator,
   });
 
@@ -628,7 +605,6 @@ class _FarmTextField extends StatelessWidget {
   final IconData icon;
   final TextInputType? keyboardType;
   final int maxLines;
-  final bool readOnly;
   final String? Function(String?)? validator;
 
   @override
@@ -648,15 +624,13 @@ class _FarmTextField extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          readOnly: readOnly,
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textSecondary),
             prefixIcon: Icon(icon, color: AppColors.textSecondary),
             filled: true,
-            fillColor:
-                readOnly ? AppColors.backgroundSoft : AppColors.surfaceMuted,
+            fillColor: AppColors.surfaceMuted,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: BorderSide.none,
@@ -672,15 +646,11 @@ class _PreviewCard extends StatelessWidget {
   const _PreviewCard({
     required this.nombre,
     required this.ubicacion,
-    required this.latitud,
-    required this.longitud,
     required this.area,
   });
 
   final String nombre;
   final String ubicacion;
-  final String latitud;
-  final String longitud;
   final String area;
 
   @override
@@ -707,9 +677,53 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 12),
           _PreviewRow(label: 'Nombre', value: nombre),
           _PreviewRow(label: 'Ubicacion', value: ubicacion),
-          _PreviewRow(label: 'Latitud', value: latitud),
-          _PreviewRow(label: 'Longitud', value: longitud),
-          _PreviewRow(label: 'Area hectareas', value: area),
+          _PreviewRow(label: 'Area en hectareas', value: area),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocationStatusCard extends StatelessWidget {
+  const _LocationStatusCard({
+    required this.hasSelectedPoint,
+  });
+
+  final bool hasSelectedPoint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color:
+            hasSelectedPoint ? AppColors.backgroundSoft : AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: hasSelectedPoint ? AppColors.sand : AppColors.surfaceMuted,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            hasSelectedPoint
+                ? Icons.check_circle_rounded
+                : Icons.location_searching_rounded,
+            color: hasSelectedPoint ? AppColors.moss : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              hasSelectedPoint
+                  ? 'Ubicacion seleccionada en el mapa'
+                  : 'Selecciona un punto en el mapa para guardar la finca',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );

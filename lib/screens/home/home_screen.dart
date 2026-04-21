@@ -1,7 +1,14 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
+import 'package:app_flutter_ai/core/services/auth/auth_service.dart';
+import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
+import 'package:app_flutter_ai/core/services/shared/sync_service.dart';
 import 'package:app_flutter_ai/layout/app_bottom_nav_bar.dart';
+import 'package:app_flutter_ai/screens/export/export_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/farm_list_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/farm_map_screen.dart';
+import 'package:app_flutter_ai/screens/profile/profile_screen.dart';
+import 'package:app_flutter_ai/screens/shared/pending_sync_screen.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,6 +20,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int _syncSeed = 0;
+  bool _isSyncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    PendingSyncService.refreshPendingCount();
+  }
 
   static const _navItems = [
     AppBottomNavItem(icon: Icons.agriculture_rounded, label: 'Fincas'),
@@ -21,15 +36,138 @@ class _HomeScreenState extends State<HomeScreen> {
     AppBottomNavItem(icon: Icons.person_rounded, label: 'Perfil'),
   ];
 
+  Future<void> _syncNow() async {
+    if (_isSyncing) {
+      return;
+    }
+
+    setState(() => _isSyncing = true);
+
+    final pendingCount = PendingSyncService.pendingCount.value;
+    int? remainingAfterSync;
+    var snackBarColor = AppColors.success;
+    var message =
+        'Sincronizacion revisada. La aplicacion conservo los datos locales cuando no era necesario repetir llamadas.';
+
+    try {
+      switch (_currentIndex) {
+        case 0:
+        case 1:
+          if (pendingCount > 0) {
+            await SyncService.syncPendingChanges();
+            remainingAfterSync = PendingSyncService.pendingCount.value;
+            message = remainingAfterSync <= 0
+                ? 'La cola de cambios pendientes se sincronizo correctamente.'
+                : 'Se subieron varios cambios, pero aun quedan $remainingAfterSync pendientes por revisar.';
+          } else {
+            message = 'No hay cambios pendientes por sincronizar.';
+          }
+          break;
+        case 2:
+          await SyncService.syncAll();
+          remainingAfterSync = PendingSyncService.pendingCount.value;
+          message = remainingAfterSync <= 0
+              ? 'La informacion se sincronizo para exportacion.'
+              : 'La exportacion actualizo datos, pero aun quedan $remainingAfterSync cambios pendientes.';
+          break;
+        case 3:
+          if (pendingCount > 0) {
+            await SyncService.syncPendingChanges();
+            remainingAfterSync = PendingSyncService.pendingCount.value;
+            message = remainingAfterSync <= 0
+                ? 'La cola de cambios pendientes se sincronizo correctamente.'
+                : 'Se subieron varios cambios, pero aun quedan $remainingAfterSync pendientes por revisar.';
+          } else {
+            message =
+                'El perfil usa primero los datos guardados en la sesion. Desliza hacia abajo para consultar el perfil remoto.';
+          }
+          break;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      final syncIssue = SyncService.lastIssueMessage;
+      if (syncIssue != null && syncIssue.trim().isNotEmpty) {
+        snackBarColor = AppColors.clayStrong;
+        message = syncIssue;
+        remainingAfterSync = PendingSyncService.pendingCount.value;
+      }
+
+      if (!SessionService.canRestoreSession || AuthService.hasInvalidSession) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Tu sesion ya no es valida. Inicia sesion nuevamente.',
+            ),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        return;
+      }
+
+      setState(() {
+        _syncSeed++;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: snackBarColor,
+          behavior: SnackBarBehavior.floating,
+          action: remainingAfterSync != null && remainingAfterSync > 0
+              ? SnackBarAction(
+                  label: 'Ver',
+                  textColor: AppColors.surface,
+                  onPressed: _openPendingSyncScreen,
+                )
+              : null,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  Future<void> _openPendingSyncScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const PendingSyncScreen(),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _syncSeed++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
       body: _buildTab(),
-      bottomNavigationBar: AppBottomNavBar(
-        items: _navItems,
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+      bottomNavigationBar: ValueListenableBuilder<int>(
+        valueListenable: PendingSyncService.pendingCount,
+        builder: (context, pendingCount, child) {
+          return AppBottomNavBar(
+            items: _navItems,
+            currentIndex: _currentIndex,
+            onTap: (index) => setState(() => _currentIndex = index),
+            onSync: _syncNow,
+            isSyncing: _isSyncing,
+            pendingCount: pendingCount,
+          );
+        },
       ),
     );
   }
@@ -37,141 +175,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTab() {
     switch (_currentIndex) {
       case 1:
-        return const FarmMapScreen(embedded: true);
+        return FarmMapScreen(
+          key: ValueKey('home-map-$_syncSeed'),
+          embedded: true,
+        );
       case 2:
-        return const _PlaceholderTab(
-          title: 'Exportar',
-          subtitle:
-              'Aqui prepararemos la exportacion en Excel de fincas, lotes, actividades, insumos y cosechas.',
-          icon: Icons.file_download_outlined,
+        return ExportScreen(
+          key: ValueKey('home-export-$_syncSeed'),
         );
       case 3:
-        return _PlaceholderTab(
-          title: 'Perfil',
-          subtitle:
-              'Este espacio queda libre para configuracion, perfil y cierre de sesion.',
-          icon: Icons.person_rounded,
-          actionLabel: 'Cerrar sesion',
-          onAction: () => Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
-          ),
+        return ProfileScreen(
+          key: ValueKey('home-profile-$_syncSeed'),
         );
       case 0:
       default:
-        return const FarmListScreen(embedded: true);
+        return FarmListScreen(
+          key: ValueKey('home-farms-$_syncSeed'),
+          embedded: true,
+        );
     }
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.background,
-            AppColors.backgroundSoft,
-            AppColors.surfaceMuted,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 110),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: AppColors.surfaceMuted, width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A3E2F25),
-                  blurRadius: 20,
-                  offset: Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundSoft,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Icon(icon, color: AppColors.clayStrong, size: 28),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.55,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                if (actionLabel != null && onAction != null) ...[
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: FilledButton(
-                      onPressed: onAction,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.clayStrong,
-                        foregroundColor: AppColors.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        actionLabel!,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
