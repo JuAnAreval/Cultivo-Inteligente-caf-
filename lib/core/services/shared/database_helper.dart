@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:app_flutter_ai/core/models/task_model.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -17,8 +14,6 @@ class DatabaseHelper {
   static const String pendingUpdate = 'pending_update';
   static const String pendingDelete = 'pending_delete';
   static const String synced = 'synced';
-  static const String appActivitiesTable = 'actividades_cultiva_tec';
-
   Future<Database> get database async {
     if (_database != null) {
       return _database!;
@@ -35,7 +30,6 @@ class DatabaseHelper {
       path,
       version: 6,
       onCreate: (db, version) async {
-        await _createTasksTable(db);
         await _createFincasTable(db);
         await _createLotesTable(db);
         await _createActividadesTable(db);
@@ -43,12 +37,6 @@ class DatabaseHelper {
         await _createCosechasTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 6) {
-          await _migrateTasksTableName(db);
-        }
-        if (oldVersion < 2) {
-          await _safeAddColumn(db, appActivitiesTable, 'dueDate', 'TEXT');
-        }
         if (oldVersion < 3) {
           await _createFincasTable(db);
           await _createLotesTable(db);
@@ -81,47 +69,6 @@ class DatabaseHelper {
     await db.execute(
       'ALTER TABLE $tableName ADD COLUMN $columnName $definition',
     );
-  }
-
-  Future<void> _createTasksTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS $appActivitiesTable(
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        state TEXT,
-        color TEXT,
-        category TEXT,
-        details TEXT,
-        dueDate TEXT,
-        subActivities TEXT
-      )
-    ''');
-  }
-
-  Future<void> _migrateTasksTableName(Database db) async {
-    final hasLegacyTable = await _tableExists(db, 'tasks');
-    final hasNewTable = await _tableExists(db, appActivitiesTable);
-
-    if (hasLegacyTable && !hasNewTable) {
-      await db.execute('ALTER TABLE tasks RENAME TO $appActivitiesTable');
-      return;
-    }
-
-    if (!hasLegacyTable && !hasNewTable) {
-      await _createTasksTable(db);
-    }
-  }
-
-  Future<bool> _tableExists(Database db, String tableName) async {
-    final result = await db.query(
-      'sqlite_master',
-      columns: ['name'],
-      where: 'type = ? AND name = ?',
-      whereArgs: ['table', tableName],
-      limit: 1,
-    );
-
-    return result.isNotEmpty;
   }
 
   Future<void> _createFincasTable(Database db) async {
@@ -235,51 +182,6 @@ class DatabaseHelper {
         last_error TEXT
       )
     ''');
-  }
-
-  Future<void> insertTask(AppTask task) async {
-    final db = await database;
-    final data = task.toJson();
-    data['subActivities'] = jsonEncode(data['subActivities']);
-
-    await db.insert(
-      appActivitiesTable,
-      data,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<void> updateTask(AppTask task) async {
-    final db = await database;
-    final data = task.toJson();
-    data['subActivities'] = jsonEncode(data['subActivities']);
-
-    await db.update(
-      appActivitiesTable,
-      data,
-      where: 'id = ?',
-      whereArgs: [task.id],
-    );
-  }
-
-  Future<void> deleteTask(String id) async {
-    final db = await database;
-    await db.delete(
-      appActivitiesTable,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<List<AppTask>> getTasks() async {
-    final db = await database;
-    final rows = await db.query(appActivitiesTable);
-
-    return List.generate(rows.length, (index) {
-      final taskMap = Map<String, dynamic>.from(rows[index]);
-      taskMap['subActivities'] = jsonDecode(taskMap['subActivities'] as String);
-      return AppTask.fromJson(taskMap);
-    });
   }
 
   Future<int> insertLocalFinca(Map<String, dynamic> finca) async {

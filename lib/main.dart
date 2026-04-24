@@ -1,8 +1,6 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
-import 'package:app_flutter_ai/core/providers/task_provider.dart';
 import 'package:app_flutter_ai/core/services/auth/auth_service.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
-import 'package:app_flutter_ai/screens/ai/dashboard_screen.dart';
 import 'package:app_flutter_ai/screens/auth/login_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/add_farm_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/farm_list_screen.dart';
@@ -11,7 +9,6 @@ import 'package:app_flutter_ai/screens/lotes/add_lot_screen.dart';
 import 'package:app_flutter_ai/screens/lotes/lot_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:provider/provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,14 +17,7 @@ Future<void> main() async {
   await AuthService.restoreSessionOnLaunch();
   final hasSession = SessionService.canRestoreSession;
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => TaskProvider()),
-      ],
-      child: MyApp(hasSession: hasSession),
-    ),
-  );
+  runApp(MyApp(hasSession: hasSession));
 }
 
 class MyApp extends StatelessWidget {
@@ -59,7 +49,6 @@ class MyApp extends StatelessWidget {
         routes: {
           '/login': (_) => const LoginScreen(),
           '/home': (_) => const HomeScreen(),
-          '/dashboard': (_) => const DashboardScreen(),
           '/add-farm': (_) => const AddFarmScreen(),
           '/farms': (_) => const FarmListScreen(),
           '/lots': (_) => const LotListScreen(
