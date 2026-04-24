@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     int? remainingAfterSync;
     var snackBarColor = AppColors.success;
     var message =
-        'Sincronizacion revisada. La aplicacion conservo los datos locales cuando no era necesario repetir llamadas.';
+        'Sincronización revisada. La aplicación conservó los datos locales cuando no era necesario repetir llamadas.';
 
     try {
       switch (_currentIndex) {
@@ -57,8 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
             await SyncService.syncPendingChanges();
             remainingAfterSync = PendingSyncService.pendingCount.value;
             message = remainingAfterSync <= 0
-                ? 'La cola de cambios pendientes se sincronizo correctamente.'
-                : 'Se subieron varios cambios, pero aun quedan $remainingAfterSync pendientes por revisar.';
+                ? 'La cola de cambios pendientes se sincronizó correctamente.'
+                : 'Se subieron varios cambios, pero aún quedan $remainingAfterSync pendientes por revisar.';
           } else {
             message = 'No hay cambios pendientes por sincronizar.';
           }
@@ -67,19 +67,19 @@ class _HomeScreenState extends State<HomeScreen> {
           await SyncService.syncAll();
           remainingAfterSync = PendingSyncService.pendingCount.value;
           message = remainingAfterSync <= 0
-              ? 'La informacion se sincronizo para exportacion.'
-              : 'La exportacion actualizo datos, pero aun quedan $remainingAfterSync cambios pendientes.';
+              ? 'La información se sincronizó para exportación.'
+              : 'La exportación actualizó datos, pero aún quedan $remainingAfterSync cambios pendientes.';
           break;
         case 3:
           if (pendingCount > 0) {
             await SyncService.syncPendingChanges();
             remainingAfterSync = PendingSyncService.pendingCount.value;
             message = remainingAfterSync <= 0
-                ? 'La cola de cambios pendientes se sincronizo correctamente.'
-                : 'Se subieron varios cambios, pero aun quedan $remainingAfterSync pendientes por revisar.';
+                ? 'La cola de cambios pendientes se sincronizó correctamente.'
+                : 'Se subieron varios cambios, pero aún quedan $remainingAfterSync pendientes por revisar.';
           } else {
             message =
-                'El perfil usa primero los datos guardados en la sesion. Desliza hacia abajo para consultar el perfil remoto.';
+                'El perfil usa primero los datos guardados en la sesión. Desliza hacia abajo para consultar el perfil remoto.';
           }
           break;
       }
@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Tu sesion ya no es valida. Inicia sesion nuevamente.',
+              'Tu sesión ya no es válida. Inicia sesión nuevamente.',
             ),
             backgroundColor: AppColors.danger,
             behavior: SnackBarBehavior.floating,
@@ -178,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return FarmMapScreen(
           key: ValueKey('home-map-$_syncSeed'),
           embedded: true,
+          onGoToFincas: () => setState(() => _currentIndex = 0),
         );
       case 2:
         return ExportScreen(

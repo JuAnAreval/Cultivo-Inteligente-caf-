@@ -42,15 +42,49 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
     _facturaController.text = (existing?['factura'] ?? '').toString();
     _tipo = ((existing?['tipo'] ?? 'organico').toString()).toLowerCase();
     _origen = ((existing?['origen'] ?? 'propio').toString()).toLowerCase();
+
+    _insumoController.addListener(_refresh);
+    _ingredientesController.addListener(_refresh);
+    _fechaController.addListener(_refresh);
+    _facturaController.addListener(_refresh);
   }
 
   @override
   void dispose() {
+    _insumoController.removeListener(_refresh);
+    _ingredientesController.removeListener(_refresh);
+    _fechaController.removeListener(_refresh);
+    _facturaController.removeListener(_refresh);
     _insumoController.dispose();
     _ingredientesController.dispose();
     _fechaController.dispose();
     _facturaController.dispose();
     super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickFecha() async {
+    final now = DateTime.now();
+    final initialDate = _parseCurrentYearDate(_fechaController.text) ?? now;
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year, 1, 1),
+      lastDate: DateTime(now.year, 12, 31),
+      helpText: 'Selecciona la fecha del insumo',
+    );
+
+    if (selectedDate == null) {
+      return;
+    }
+
+    _fechaController.text = _formatDate(selectedDate);
   }
 
   Future<void> _save() async {
@@ -66,7 +100,7 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
         'id_lote': widget.lotId,
         'insumo': _insumoController.text.trim(),
         'ingredientes_activos': _ingredientesController.text.trim(),
-        'fecha': _fechaController.text.trim(),
+        'fecha': _formatDate(_parseCurrentYearDate(_fechaController.text.trim())!),
         'tipo': _tipo,
         'origen': _origen,
         'factura': _facturaController.text.trim(),
@@ -115,9 +149,71 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
     }
   }
 
+  String? _required(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Este campo es obligatorio';
+    }
+    return null;
+  }
+
+  String? _validateFecha(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Selecciona una fecha';
+    }
+
+    if (_parseCurrentYearDate(value.trim()) == null) {
+      return 'Usa una fecha válida del año actual';
+    }
+
+    return null;
+  }
+
+  String? _validateFactura(String? value) {
+    if (_origen == 'comprado' && (value == null || value.trim().isEmpty)) {
+      return 'La factura es obligatoria si el insumo es comprado';
+    }
+    return null;
+  }
+
+  DateTime? _parseCurrentYearDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) {
+      return null;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return null;
+    }
+
+    if (year != DateTime.now().year) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.existingInsumo != null;
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -128,7 +224,7 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.fromLTRB(18, 18, 18, bottomSafeArea + 36),
         child: Form(
           key: _formKey,
           child: Column(
@@ -181,9 +277,11 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
                     _Field(
                       controller: _fechaController,
                       label: 'Fecha',
-                      hint: 'YYYY-MM-DD',
+                      hint: 'Selecciona una fecha',
                       icon: Icons.event_rounded,
-                      validator: _required,
+                      readOnly: true,
+                      onTap: _pickFecha,
+                      validator: _validateFecha,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -235,8 +333,11 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
                     _Field(
                       controller: _facturaController,
                       label: 'Factura',
-                      hint: 'Ej: FAC-001 o nota interna',
+                      hint: _origen == 'propio'
+                          ? 'Opcional si el insumo es propio'
+                          : 'Ej: FAC-001 o nota interna',
                       icon: Icons.receipt_long_rounded,
+                      validator: _validateFactura,
                     ),
                   ],
                 ),
@@ -304,13 +405,6 @@ class _AddInsumoScreenState extends State<AddInsumoScreen> {
       ),
     );
   }
-
-  String? _required(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Este campo es obligatorio';
-    }
-    return null;
-  }
 }
 
 class _SectionCard extends StatelessWidget {
@@ -341,6 +435,8 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.maxLines = 1,
     this.validator,
+    this.readOnly = false,
+    this.onTap,
   });
 
   final TextEditingController controller;
@@ -349,6 +445,8 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final int maxLines;
   final String? Function(String?)? validator;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -367,6 +465,8 @@ class _Field extends StatelessWidget {
           controller: controller,
           maxLines: maxLines,
           validator: validator,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textSecondary),

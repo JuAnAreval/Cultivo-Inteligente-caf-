@@ -11,19 +11,126 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late Future<Map<String, dynamic>> _profileFuture;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _identificationController =
+      TextEditingController();
+  final TextEditingController _socialMediaController = TextEditingController();
+
+  Map<String, dynamic> _profile = <String, dynamic>{};
+  bool _isLoading = true;
+  bool _isEditing = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _profileFuture = ProfileService.getProfile();
+    _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _identificationController.dispose();
+    _socialMediaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadProfile({bool remote = false}) async {
+    if (!_isEditing) {
+      setState(() => _isLoading = true);
+    }
+
+    try {
+      final profile = await ProfileService.getProfile(remote: remote);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _profile = profile;
+        _isLoading = false;
+      });
+      _fillControllers(profile);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isLoading = false);
+      _showSnackBar(
+        'No fue posible cargar el perfil: $error',
+        AppColors.danger,
+      );
+    }
+  }
+
+  void _fillControllers(Map<String, dynamic> profile) {
+    _nameController.text = (profile['displayName'] ?? '').toString();
+    _emailController.text = (profile['email'] ?? '').toString();
+    _phoneController.text = (profile['phone'] ?? '').toString();
+    _addressController.text = (profile['address'] ?? '').toString();
+    _identificationController.text =
+        (profile['identification'] ?? '').toString();
+    _socialMediaController.text = (profile['socialMedia'] ?? '').toString();
   }
 
   Future<void> _reload() async {
-    setState(() {
-      _profileFuture = ProfileService.getProfile(remote: true);
-    });
-    await _profileFuture;
+    await _loadProfile(remote: true);
+  }
+
+  Future<void> _saveProfile() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+
+    if (name.isEmpty || email.isEmpty) {
+      _showSnackBar(
+        'Nombre y correo son obligatorios para guardar el perfil.',
+        AppColors.clayStrong,
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final updated = await ProfileService.updateProfile(
+        displayName: name,
+        email: email,
+        phone: _phoneController.text,
+        address: _addressController.text,
+        identification: _identificationController.text,
+        socialMedia: _socialMediaController.text,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _profile = updated;
+        _isEditing = false;
+        _isSaving = false;
+      });
+      _fillControllers(updated);
+      _showSnackBar('Perfil actualizado correctamente.', AppColors.success);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isSaving = false);
+      _showSnackBar(
+        'No fue posible actualizar el perfil: $error',
+        AppColors.danger,
+      );
+    }
+  }
+
+  void _cancelEdit() {
+    setState(() => _isEditing = false);
+    _fillControllers(_profile);
   }
 
   Future<void> _logout() async {
@@ -34,8 +141,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final profile = _profile;
+    final name = (profile['displayName'] ?? 'Usuario de campo').toString();
+    final role = (profile['roleName'] ?? 'Administrador de fincas').toString();
+    final company = (profile['companyName'] ?? 'Dato Rural').toString();
+    final email = (profile['email'] ?? '').toString();
+    final phone = (profile['phone'] ?? '').toString();
+    final address = (profile['address'] ?? '').toString();
+    final identification = (profile['identification'] ?? '').toString();
+    final socialMedia = (profile['socialMedia'] ?? '').toString();
+
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -50,175 +177,401 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: SafeArea(
         bottom: false,
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _profileFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
+        child: _isLoading
+            ? const Center(
                 child: CircularProgressIndicator(color: AppColors.moss),
-              );
-            }
-
-            final profile = snapshot.data ?? <String, dynamic>{};
-            final name = (profile['displayName'] ?? 'Usuario de campo').toString();
-            final role = (profile['roleName'] ?? 'Administrador de fincas').toString();
-            final company = (profile['companyName'] ?? 'Dato Rural').toString();
-            final email = (profile['email'] ?? '').toString();
-            final phone = (profile['phone'] ?? '').toString();
-            final address = (profile['address'] ?? '').toString();
-            final identification = (profile['identification'] ?? '').toString();
-            final socialMedia = (profile['socialMedia'] ?? '').toString();
-
-            return RefreshIndicator(
-              onRefresh: _reload,
-              color: AppColors.moss,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(22),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface.withValues(alpha: 0.96),
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: AppColors.sand),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x0F3E2F25),
-                          blurRadius: 22,
-                          offset: Offset(0, 10),
-                        ),
-                      ],
+              )
+            : RefreshIndicator(
+                onRefresh: _reload,
+                color: AppColors.moss,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 132),
+                  children: [
+                    _ProfileHeroCard(
+                      name: name,
+                      role: role,
+                      company: company,
+                      isEditing: _isEditing,
+                      onEdit: () {
+                        setState(() => _isEditing = true);
+                      },
                     ),
-                    child: Column(
-                      children: [
-                        _ProfileAvatar(name: name),
-                        const SizedBox(height: 14),
-                        Text(
-                          name,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                            letterSpacing: -0.6,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          role,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        _SectionTitle('Información de contacto'),
-                        const SizedBox(height: 12),
-                        _InfoTile(
-                          icon: Icons.mail_outline_rounded,
-                          title: email.isEmpty ? 'Correo no disponible' : email,
-                        ),
-                        _InfoTile(
-                          icon: Icons.call_outlined,
-                          title: phone.isEmpty ? 'Teléfono no registrado' : phone,
-                        ),
-                        _InfoTile(
-                          icon: Icons.location_on_outlined,
-                          title: address.isEmpty ? 'Dirección no registrada' : address,
-                        ),
-                        const Divider(height: 30, color: AppColors.surfaceMuted),
-                        _SectionTitle('Detalles de la cuenta'),
-                        const SizedBox(height: 12),
-                        _InfoTile(
-                          icon: Icons.apartment_rounded,
-                          title: 'Organización: $company',
-                        ),
-                        _InfoTile(
-                          icon: Icons.badge_outlined,
-                          title: identification.isEmpty
-                              ? 'Identificación no registrada'
-                              : 'Identificación: $identification',
-                        ),
-                        if (socialMedia.isNotEmpty)
-                          _InfoTile(
-                            icon: Icons.public_rounded,
-                            title: socialMedia,
-                          ),
-                        const Divider(height: 30, color: AppColors.surfaceMuted),
-                        _SectionTitle('Configuración'),
-                        const SizedBox(height: 12),
-                        const _ActionTile(
-                          icon: Icons.tune_rounded,
-                          title: 'Configuración general',
-                          subtitle: 'Preferencias y ajustes visuales',
-                        ),
-                        const _ActionTile(
-                          icon: Icons.lock_outline_rounded,
-                          title: 'Seguridad y contraseña',
-                          subtitle: 'Protección de acceso y sesión',
-                        ),
-                        const _ActionTile(
-                          icon: Icons.help_outline_rounded,
-                          title: 'Ayuda y soporte',
-                          subtitle: 'Guías de uso y contacto',
-                        ),
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _reload,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.clayStrong,
-                              foregroundColor: AppColors.surface,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                            ),
-                            icon: const Icon(Icons.sync_rounded),
-                            label: const Text(
-                              'Actualizar perfil',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _logout,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.soil,
-                              backgroundColor: AppColors.backgroundSoft,
-                              side: const BorderSide(color: AppColors.sand),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                            ),
-                            icon: const Icon(Icons.logout_rounded),
-                            label: const Text(
-                              'Cerrar sesión',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 18),
+                    if (_isEditing)
+                      _EditableProfileCard(
+                        nameController: _nameController,
+                        emailController: _emailController,
+                        phoneController: _phoneController,
+                        addressController: _addressController,
+                        identificationController: _identificationController,
+                        socialMediaController: _socialMediaController,
+                        isSaving: _isSaving,
+                        onCancel: _cancelEdit,
+                        onSave: _saveProfile,
+                      )
+                    else
+                      _ProfileOverviewCard(
+                        email: email,
+                        phone: phone,
+                        address: address,
+                        identification: identification,
+                        socialMedia: socialMedia,
+                      ),
+                    const SizedBox(height: 18),
+                    _ProfileActionsCard(
+                      onLogout: _logout,
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _ProfileHeroCard extends StatelessWidget {
+  const _ProfileHeroCard({
+    required this.name,
+    required this.role,
+    required this.company,
+    required this.isEditing,
+    required this.onEdit,
+  });
+
+  final String name;
+  final String role;
+  final String company;
+  final bool isEditing;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: AppColors.sand),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x123E2F25),
+            blurRadius: 22,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _ProfileAvatar(name: name),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      role,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      company,
+                      style: const TextStyle(
+                        color: AppColors.clayStrong,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundSoft,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    isEditing ? 'Editando perfil' : 'Perfil de Cultiva Tec',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
+                ),
               ),
-            );
-          },
-        ),
+              if (!isEditing) ...[
+                const SizedBox(width: 10),
+                FilledButton.icon(
+                  onPressed: onEdit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.clayStrong,
+                    foregroundColor: AppColors.surface,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_rounded),
+                  label: const Text('Editar'),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditableProfileCard extends StatelessWidget {
+  const _EditableProfileCard({
+    required this.nameController,
+    required this.emailController,
+    required this.phoneController,
+    required this.addressController,
+    required this.identificationController,
+    required this.socialMediaController,
+    required this.isSaving,
+    required this.onCancel,
+    required this.onSave,
+  });
+
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final TextEditingController phoneController;
+  final TextEditingController addressController;
+  final TextEditingController identificationController;
+  final TextEditingController socialMediaController;
+  final bool isSaving;
+  final VoidCallback onCancel;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Editar información',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _ProfileField(
+            controller: nameController,
+            label: 'Nombre completo',
+            icon: Icons.person_outline_rounded,
+          ),
+          const SizedBox(height: 14),
+          _ProfileField(
+            controller: emailController,
+            label: 'Correo',
+            icon: Icons.mail_outline_rounded,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 14),
+          _ProfileField(
+            controller: phoneController,
+            label: 'Teléfono',
+            icon: Icons.call_outlined,
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 14),
+          _ProfileField(
+            controller: addressController,
+            label: 'Dirección',
+            icon: Icons.location_on_outlined,
+            maxLines: 2,
+          ),
+          const SizedBox(height: 14),
+          _ProfileField(
+            controller: identificationController,
+            label: 'Identificación',
+            icon: Icons.badge_outlined,
+          ),
+          const SizedBox(height: 14),
+          _ProfileField(
+            controller: socialMediaController,
+            label: 'Red social o enlace',
+            icon: Icons.public_rounded,
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: isSaving ? null : onCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.soil,
+                    side: const BorderSide(color: AppColors.sand),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: isSaving ? null : onSave,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.moss,
+                    foregroundColor: AppColors.surface,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                  icon: isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.surface,
+                          ),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(isSaving ? 'Guardando...' : 'Guardar cambios'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileOverviewCard extends StatelessWidget {
+  const _ProfileOverviewCard({
+    required this.email,
+    required this.phone,
+    required this.address,
+    required this.identification,
+    required this.socialMedia,
+  });
+
+  final String email;
+  final String phone;
+  final String address;
+  final String identification;
+  final String socialMedia;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Información personal',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _InfoRow(
+            icon: Icons.mail_outline_rounded,
+            label: 'Correo',
+            value: email.isEmpty ? 'No registrado' : email,
+          ),
+          _InfoRow(
+            icon: Icons.call_outlined,
+            label: 'Teléfono',
+            value: phone.isEmpty ? 'No registrado' : phone,
+          ),
+          _InfoRow(
+            icon: Icons.location_on_outlined,
+            label: 'Dirección',
+            value: address.isEmpty ? 'No registrada' : address,
+          ),
+          _InfoRow(
+            icon: Icons.badge_outlined,
+            label: 'Identificación',
+            value: identification.isEmpty ? 'No registrada' : identification,
+          ),
+          _InfoRow(
+            icon: Icons.public_rounded,
+            label: 'Red social',
+            value: socialMedia.isEmpty ? 'No registrada' : socialMedia,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileActionsCard extends StatelessWidget {
+  const _ProfileActionsCard({
+    required this.onLogout,
+  });
+
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onLogout,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.soil,
+                side: const BorderSide(color: AppColors.sand),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Cerrar sesión'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -239,10 +592,10 @@ class _ProfileAvatar extends StatelessWidget {
         .join();
 
     return Container(
-      width: 108,
-      height: 108,
+      width: 88,
+      height: 88,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(26),
         gradient: const LinearGradient(
           colors: [
             AppColors.clayStrong,
@@ -251,20 +604,13 @@ class _ProfileAvatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x223E2F25),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
       ),
       child: Center(
         child: Text(
           parts.isEmpty ? 'U' : parts,
           style: const TextStyle(
             color: AppColors.surface,
-            fontSize: 34,
+            fontSize: 30,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -273,40 +619,68 @@ class _ProfileAvatar extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+class _ProfileField extends StatelessWidget {
+  const _ProfileField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.keyboardType,
+    this.maxLines = 1,
+  });
 
-  final String text;
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textPrimary,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: AppColors.textSecondary),
+            filled: true,
+            fillColor: AppColors.backgroundSoft,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
     required this.icon,
-    required this.title,
+    required this.label,
+    required this.value,
   });
 
   final IconData icon;
-  final String title;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -317,79 +691,33 @@ class _InfoTile extends StatelessWidget {
               color: AppColors.backgroundSoft,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: AppColors.clayStrong, size: 22),
+            child: Icon(icon, color: AppColors.clayStrong),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSoft,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.soil),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
+                  label,
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
-                    height: 1.3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textSecondary,
           ),
         ],
       ),

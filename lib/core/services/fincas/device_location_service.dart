@@ -5,7 +5,7 @@ class DeviceLocationService {
   static Future<LatLng> getCurrentLatLng() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Activa la ubicacion del dispositivo para continuar.');
+      throw Exception('Activa la ubicación del dispositivo para continuar.');
     }
 
     var permission = await Geolocator.checkPermission();
@@ -14,12 +14,12 @@ class DeviceLocationService {
     }
 
     if (permission == LocationPermission.denied) {
-      throw Exception('No se concedio permiso de ubicacion.');
+      throw Exception('No se concedió permiso de ubicación.');
     }
 
     if (permission == LocationPermission.deniedForever) {
       throw Exception(
-        'El permiso de ubicacion esta bloqueado. Debes habilitarlo desde ajustes.',
+        'El permiso de ubicación está bloqueado. Debes habilitarlo desde ajustes.',
       );
     }
 

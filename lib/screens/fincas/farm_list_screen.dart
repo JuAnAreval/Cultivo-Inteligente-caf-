@@ -1,6 +1,7 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
 import 'package:app_flutter_ai/core/services/fincas/finca_service.dart';
+import 'package:app_flutter_ai/core/widgets/cultiva_ui.dart';
 import 'package:app_flutter_ai/screens/cosechas/cosecha_list_screen.dart';
 import 'package:app_flutter_ai/screens/fincas/add_farm_screen.dart';
 import 'package:app_flutter_ai/screens/lotes/lot_list_screen.dart';
@@ -64,9 +65,7 @@ class _FarmListScreenState extends State<FarmListScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _farmsFuture = _loadFarms();
-    });
+    setState(() => _farmsFuture = _loadFarms());
     await _farmsFuture;
   }
 
@@ -110,7 +109,7 @@ class _FarmListScreenState extends State<FarmListScreen> {
         return AlertDialog(
           title: const Text('Eliminar finca'),
           content: Text(
-            'Vas a eliminar "$farmName". Esta accion tambien puede afectar el trabajo relacionado a esta finca.',
+            'Vas a eliminar "$farmName". Esta accion tambien puede afectar el trabajo relacionado con esta finca.',
           ),
           actions: [
             TextButton(
@@ -161,6 +160,42 @@ class _FarmListScreenState extends State<FarmListScreen> {
     }
   }
 
+  void _openLots(Map<String, dynamic> farm) {
+    final farmId = (farm['id'] ?? '').toString();
+    final farmName = (farm['nombre'] ?? 'Finca').toString();
+    if (farmId.isEmpty) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LotListScreen(
+          farmId: farmId,
+          farmName: farmName,
+        ),
+      ),
+    );
+  }
+
+  void _openCosechas(Map<String, dynamic> farm) {
+    final farmId = (farm['id'] ?? '').toString();
+    final farmName = (farm['nombre'] ?? 'Finca').toString();
+    if (farmId.isEmpty) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CosechaListScreen(
+          farmId: farmId,
+          farmName: farmName,
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _farmsFuture,
@@ -175,33 +210,18 @@ class _FarmListScreenState extends State<FarmListScreen> {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: AppColors.danger,
-                    size: 42,
+              child: CultivaEmptyStateCard(
+                icon: Icons.error_outline_rounded,
+                title: 'No pudimos cargar tus fincas',
+                message: '${snapshot.error}',
+                action: FilledButton(
+                  onPressed: _refresh,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.moss,
+                    foregroundColor: AppColors.surface,
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'No se pudieron cargar las fincas.\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    onPressed: _refresh,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.moss,
-                      foregroundColor: AppColors.surface,
-                    ),
-                    child: const Text('Reintentar'),
-                  ),
-                ],
+                  child: const Text('Reintentar'),
+                ),
               ),
             ),
           );
@@ -216,60 +236,75 @@ class _FarmListScreenState extends State<FarmListScreen> {
               16,
               widget.embedded ? 18 : 16,
               16,
-              widget.embedded ? 124 : 96,
+              widget.embedded ? 132 : 104,
             ),
             children: [
-              if (widget.embedded) const _FarmHeroCard(),
-              if (widget.embedded) const SizedBox(height: 16),
+              CultivaHeroCard(
+                eyebrow: 'Cultiva Tec',
+                title: 'Tus fincas',
+                description:
+                    'Organiza cada finca, entra a sus lotes y manten tus registros de campo mucho mas claros.',
+                footer: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    CultivaTintedChip(
+                      icon: Icons.home_work_rounded,
+                      label:
+                          '${farms.length} ${farms.length == 1 ? 'finca registrada' : 'fincas registradas'}',
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.clayStrong,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Listado de fincas',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  CultivaStatusBadge(
+                    label: '${farms.length}',
+                    color: AppColors.moss,
+                    backgroundColor: AppColors.backgroundSoft,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
               if (farms.isEmpty)
-                const _EmptyFarmCard()
-              else ...[
-                _FarmSectionHeader(total: farms.length),
-                const SizedBox(height: 12),
+                CultivaEmptyStateCard(
+                  icon: Icons.home_work_outlined,
+                  title: 'Aún no tienes fincas registradas',
+                  message:
+                      'Crea tu primera finca para empezar a organizar lotes, cosechas y actividades.',
+                  action: FilledButton.icon(
+                    onPressed: () => _openFarmForm(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.moss,
+                      foregroundColor: AppColors.surface,
+                    ),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Nueva finca'),
+                  ),
+                )
+              else
                 ...farms.map(
                   (farm) => _FarmCard(
                     farm: farm,
-                    onTap: () {
-                      final farmId = (farm['id'] ?? '').toString();
-                      final farmName = (farm['nombre'] ?? 'Finca').toString();
-
-                      if (farmId.isEmpty) {
-                        return;
-                      }
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => LotListScreen(
-                            farmId: farmId,
-                            farmName: farmName,
-                          ),
-                        ),
-                      );
-                    },
-                    onOpenCosechas: () {
-                      final farmId = (farm['id'] ?? '').toString();
-                      final farmName = (farm['nombre'] ?? 'Finca').toString();
-
-                      if (farmId.isEmpty) {
-                        return;
-                      }
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CosechaListScreen(
-                            farmId: farmId,
-                            farmName: farmName,
-                          ),
-                        ),
-                      );
-                    },
+                    onOpenLots: () => _openLots(farm),
+                    onOpenCosechas: () => _openCosechas(farm),
                     onEdit: () => _openFarmForm(farm: farm),
                     onDelete: () => _deleteFarm(farm),
                   ),
                 ),
-              ],
             ],
           ),
         );
@@ -299,11 +334,10 @@ class _FarmListScreenState extends State<FarmListScreen> {
             body: _buildBody(),
             floatingActionButton: Padding(
               padding: const EdgeInsets.only(bottom: 122),
-              child: FloatingActionButton(
+              child: CultivaPillFab(
+                icon: Icons.add_rounded,
+                label: 'Nueva finca',
                 onPressed: () => _openFarmForm(),
-                backgroundColor: AppColors.moss,
-                foregroundColor: AppColors.surface,
-                child: const Icon(Icons.add_rounded),
               ),
             ),
           ),
@@ -313,105 +347,16 @@ class _FarmListScreenState extends State<FarmListScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Gestiona fincas'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
+      appBar: buildCultivaSecondaryAppBar(
+        context: context,
+        title: 'Fincas',
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: CultivaPillFab(
+        icon: Icons.add_rounded,
+        label: 'Nueva finca',
         onPressed: () => _openFarmForm(),
-        backgroundColor: AppColors.moss,
-        foregroundColor: AppColors.surface,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nueva finca'),
       ),
-    );
-  }
-}
-
-class _FarmHeroCard extends StatelessWidget {
-  const _FarmHeroCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Fincas',
-            style: TextStyle(
-              color: AppColors.clayStrong,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Tus fincas',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            'Entra a cada finca para ver sus lotes, registrar actividades y mantener tu información organizada.',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FarmSectionHeader extends StatelessWidget {
-  const _FarmSectionHeader({required this.total});
-
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text(
-            'Listado de fincas',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.sand),
-          ),
-          child: Text(
-            '$total',
-            style: const TextStyle(
-              color: AppColors.moss,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -419,244 +364,164 @@ class _FarmSectionHeader extends StatelessWidget {
 class _FarmCard extends StatelessWidget {
   const _FarmCard({
     required this.farm,
-    required this.onTap,
+    required this.onOpenLots,
     required this.onOpenCosechas,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Map<String, dynamic> farm;
-  final VoidCallback onTap;
+  final VoidCallback onOpenLots;
   final VoidCallback onOpenCosechas;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  String _shortText(String value, int maxLength) {
+    final cleaned = value.trim();
+    if (cleaned.length <= maxLength) {
+      return cleaned;
+    }
+    return '${cleaned.substring(0, maxLength - 3)}...';
+  }
 
   @override
   Widget build(BuildContext context) {
     final nombre = (farm['nombre'] ?? '').toString();
     final ubicacion = (farm['ubicacion_texto'] ?? '').toString();
     final area = (farm['area_hectareas'] ?? '').toString();
+    final ubicacionResumen = _shortText(
+      ubicacion.isEmpty ? 'Sin dato' : ubicacion,
+      18,
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return CultivaEntityCard(
+      accentColor: AppColors.moss,
+      onTap: onOpenLots,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            nombre.isEmpty ? 'Finca sin nombre' : nombre,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            ubicacion.isEmpty
-                                ? 'Sin ubicación registrada'
-                                : ubicacion,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              height: 1.45,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      nombre.isEmpty ? 'Finca sin nombre' : nombre,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Row(
-                      children: [
-                        _CornerActionButton(
-                          icon: Icons.edit_rounded,
-                          color: AppColors.clayStrong,
-                          tooltip: 'Editar finca',
-                          onTap: onEdit,
-                        ),
-                        const SizedBox(width: 8),
-                        _CornerActionButton(
-                          icon: Icons.delete_outline_rounded,
-                          color: AppColors.danger,
-                          tooltip: 'Eliminar finca',
-                          onTap: onDelete,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _FarmChip(
-                      icon: Icons.crop_landscape_rounded,
-                      text:
-                          area.isEmpty ? 'Area no definida' : '$area hectareas',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onTap,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.moss,
-                          side: const BorderSide(color: AppColors.sand),
-                        ),
-                        icon: const Icon(Icons.grid_view_rounded),
-                        label: const Text('Lotes'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onOpenCosechas,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.clayStrong,
-                          side: const BorderSide(color: AppColors.sand),
-                        ),
-                        icon: const Icon(Icons.agriculture_rounded),
-                        label: const Text('Cosechas'),
+                    const SizedBox(height: 8),
+                    Text(
+                      ubicacion.isEmpty
+                          ? 'Sin ubicación registrada'
+                          : 'Lista para gestionar lotes y cosechas.',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                        height: 1.45,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              PopupMenuButton<String>(
+                color: AppColors.surface,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEdit();
+                  } else if (value == 'delete') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Editar'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Eliminar'),
+                  ),
+                ],
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(
+                    color: AppColors.backgroundSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.more_horiz_rounded,
+                    color: AppColors.clayStrong,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CornerActionButton extends StatelessWidget {
-  const _CornerActionButton({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: AppColors.backgroundSoft,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: 38,
-            height: 38,
-            child: Icon(icon, size: 18, color: color),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: CultivaMiniStat(
+                  value: area.isEmpty ? 'Sin dato' : area,
+                  label: 'hectáreas',
+                ),
+              ),
+              Expanded(
+                child: CultivaMiniStat(
+                  value: ubicacionResumen,
+                  label: 'ubicación',
+                  alignment: CrossAxisAlignment.end,
+                ),
+              ),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FarmChip extends StatelessWidget {
-  const _FarmChip({
-    required this.icon,
-    required this.text,
-  });
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSoft,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppColors.moss),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyFarmCard extends StatelessWidget {
-  const _EmptyFarmCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.home_work_outlined,
-            color: AppColors.moss,
-            size: 40,
-          ),
-          SizedBox(height: 14),
-          Text(
-            'Aún no hay fincas creadas',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Usa el boton Nueva finca para registrar la primera y empezar a organizar tu campo.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.sand),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onOpenLots,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.moss,
+                    side: const BorderSide(color: AppColors.sand),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  icon: const Icon(Icons.grid_view_rounded),
+                  label: const Text('Lotes'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onOpenCosechas,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.clayStrong,
+                    side: const BorderSide(color: AppColors.sand),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  icon: const Icon(Icons.agriculture_rounded),
+                  label: const Text('Cosechas'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

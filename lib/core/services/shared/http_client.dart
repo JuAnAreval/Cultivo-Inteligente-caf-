@@ -315,7 +315,7 @@ class HttpClient {
 
     if (!SessionService.hasRefreshToken) {
       throw SessionUnavailableException(
-        'La sesion vencio y no hay refresh token disponible. Tus datos siguen guardados localmente.',
+        'La sesión venció y no hay refresh token disponible. Tus datos siguen guardados localmente.',
       );
     }
 
@@ -324,8 +324,8 @@ class HttpClient {
       final reason = AuthService.lastRefreshFailureMessage;
       throw SessionUnavailableException(
         reason == null || reason.trim().isEmpty
-            ? 'No se pudo renovar la sesion para sincronizar. Tus datos siguen guardados localmente.'
-            : 'No se pudo renovar la sesion para sincronizar: $reason',
+            ? 'No se pudo renovar la sesión para sincronizar. Tus datos siguen guardados localmente.'
+            : 'No se pudo renovar la sesión para sincronizar: $reason',
       );
     }
   }
@@ -343,7 +343,7 @@ class HttpClient {
       return await action();
     } catch (error) {
       if (_isNoConnectionError(error)) {
-        throw NoConnectionException('En este momento no tienes conexion.');
+        throw NoConnectionException('En este momento no tienes conexión.');
       }
       rethrow;
     }

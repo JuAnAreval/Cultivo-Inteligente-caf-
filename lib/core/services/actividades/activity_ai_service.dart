@@ -45,6 +45,14 @@ class ActivityAiService {
     'na',
   };
 
+  static const List<String> _doseRequiredKeywords = [
+    'fertiliz',
+    'plaga',
+    'encal',
+    'rieg',
+    'nutric',
+  ];
+
   Future<Map<String, dynamic>?> generateDraft({
     required String command,
     required String lotName,
@@ -56,7 +64,7 @@ class ActivityAiService {
     if (!_looksLikeFieldActivity(normalizedCommand)) {
       return {
         'error':
-            'No detecte una actividad de campo valida. Describe labores como poda, fertilizacion, riego, aplicaciones o deshierbe.',
+            'No detecté una actividad de campo válida. Describe labores como poda, fertilización, riego, aplicaciones o deshierbe.',
       };
     }
 
@@ -65,19 +73,22 @@ class ActivityAiService {
         : normalizedCommand;
 
     final rules = '''
-Eres un asistente experto en registro agricola de cafe.
+Eres un asistente experto en registro agrícola de café.
 Analiza SOLO actividades de campo del lote "$lotName" en la finca "$farmName".
 
 REGLAS ESTRICTAS:
 1. Responde EXCLUSIVAMENTE JSON puro.
-2. Si el texto no describe una actividad agricola valida, responde exactamente:
-{"error":"No se detecto una actividad de campo valida."}
+2. Si el texto no describe una actividad agrícola válida, responde exactamente:
+{"error":"No se detectó una actividad de campo válida."}
 3. "fecha": formato YYYY-MM-DD. Si falta, usa "$today".
-4. "actividad": nombre corto, tecnico y claro de la labor realizada.
+4. "actividad": nombre corto, técnico y claro de la labor realizada.
 5. "aplicaciones": productos o mezclas mencionadas. Si no hay, "".
-6. "dosis": cantidades mencionadas. Si no hay, "".
+6. "dosis": cantidades mencionadas.
+   - Déjala vacía para preparación de terreno, siembra, poda, manejo de malezas/arvenses, recolección y trasplante.
+   - Úsala normalmente para fertilización, control de plagas, encalado, riego y manejo nutricional.
+   - Si no se menciona una dosis, responde "".
 7. "observaciones_responsable": observaciones y/o responsable. Si no hay, "".
-8. NO inventes informacion.
+8. NO inventes información.
 9. NO expliques nada fuera del JSON.
 
 Formato obligatorio:
@@ -102,7 +113,7 @@ Formato obligatorio:
 
     if (result.containsKey('error')) {
       return {
-        'error': (result['error'] ?? 'No se detecto una actividad valida.')
+        'error': (result['error'] ?? 'No se detectó una actividad válida.')
             .toString(),
       };
     }
@@ -114,15 +125,20 @@ Formato obligatorio:
           ) ??
           {
             'error':
-                'Ese mensaje no parece una actividad de campo valida para registrar.',
+                'Ese mensaje no parece una actividad de campo válida para registrar.',
           };
     }
 
+    final actividad =
+        _capitalize((result['actividad'] ?? '').toString().trim());
+
     return {
       'fecha': (result['fecha'] ?? today).toString().trim(),
-      'actividad': _capitalize((result['actividad'] ?? '').toString().trim()),
+      'actividad': actividad,
       'aplicaciones': (result['aplicaciones'] ?? '').toString().trim(),
-      'dosis': (result['dosis'] ?? '').toString().trim(),
+      'dosis': _doseIsRequiredForActivity(actividad)
+          ? (result['dosis'] ?? '').toString().trim()
+          : '',
       'observaciones_responsable':
           (result['observaciones_responsable'] ?? '').toString().trim(),
     };
@@ -149,36 +165,55 @@ Formato obligatorio:
       'fecha': _extractDate(normalizedCommand) ?? today,
       'actividad': actividad,
       'aplicaciones': _extractApplications(normalizedCommand),
-      'dosis': _extractDose(normalizedCommand),
+      'dosis': _doseIsRequiredForActivity(actividad)
+          ? _extractDose(normalizedCommand)
+          : '',
       'observaciones_responsable': _extractNotesOrResponsible(normalizedCommand),
     };
   }
 
   String _detectActivity(String input) {
     final value = input.toLowerCase();
+    if (value.contains('traspl')) {
+      return 'Trasplante';
+    }
+    if (value.contains('prepar') || value.contains('surco')) {
+      return 'Preparación de terreno';
+    }
+    if (value.contains('encal') || value.contains('cal')) {
+      return 'Encalado';
+    }
+    if (value.contains('nutric')) {
+      return 'Manejo nutricional';
+    }
     if (value.contains('poda')) {
       return 'Poda';
     }
-    if (value.contains('plate')) {
-      return 'Plateo';
+    if (value.contains('plate') ||
+        value.contains('deshier') ||
+        value.contains('desyer') ||
+        value.contains('maleza') ||
+        value.contains('arvens') ||
+        value.contains('rocer')) {
+      return 'Manejo de malezas';
     }
     if (value.contains('fertiliz') || value.contains('abono') || value.contains('urea')) {
-      return 'Fertilizacion';
+      return 'Fertilización';
     }
     if (value.contains('rieg')) {
       return 'Riego';
     }
-    if (value.contains('deshier') || value.contains('desyer') || value.contains('maleza')) {
-      return 'Deshierbe';
-    }
     if (value.contains('fumig') ||
         value.contains('asper') ||
         value.contains('pulver') ||
-        value.contains('aplic')) {
-      return 'Aplicacion';
+        value.contains('aplic') ||
+        value.contains('plaga') ||
+        value.contains('insect') ||
+        value.contains('fungic')) {
+      return 'Control de plagas';
     }
     if (value.contains('cosech') || value.contains('recog')) {
-      return 'Cosecha';
+      return 'Recolección';
     }
     if (value.contains('siembr')) {
       return 'Siembra';
@@ -205,6 +240,11 @@ Formato obligatorio:
       caseSensitive: false,
     ).firstMatch(input);
     return (match?.group(0) ?? '').trim();
+  }
+
+  bool _doseIsRequiredForActivity(String activity) {
+    final normalized = activity.toLowerCase();
+    return _doseRequiredKeywords.any(normalized.contains);
   }
 
   String _extractNotesOrResponsible(String input) {

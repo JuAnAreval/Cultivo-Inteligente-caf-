@@ -1,7 +1,9 @@
 class ApiConfig {
   static const String baseUrl = 'https://apicafe.datorural.com/api/v1';
+  static const String authDomain = 'https://asprounion.datorural.com';
   static const String login = '$baseUrl/auth/email/login';
   static const String refresh = '$baseUrl/auth/refresh';
+  static const String forgotPassword = '$baseUrl/auth/forgot/password';
   static const String forms = '$baseUrl/forms';
   static const String userCompanies = '$baseUrl/user-companies';
 

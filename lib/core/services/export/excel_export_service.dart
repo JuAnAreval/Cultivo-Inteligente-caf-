@@ -15,11 +15,13 @@ class ExportFileInfo {
     required this.fileName,
     required this.filePath,
     required this.itemCount,
+    this.modifiedAt,
   });
 
   final String fileName;
   final String filePath;
   final int itemCount;
+  final DateTime? modifiedAt;
 }
 
 class ExportBatchResult {
@@ -73,8 +75,7 @@ class ExcelExportService {
   }
 
   static Future<int> countActividadesByLote(int loteLocalId) async {
-    final rows =
-        await DatabaseHelper().getVisibleActividadesByLote(loteLocalId);
+    final rows = await DatabaseHelper().getVisibleActividadesByLote(loteLocalId);
     return rows.length;
   }
 
@@ -86,14 +87,57 @@ class ExcelExportService {
   static Future<CosechaExportSummary> getCosechaSummaryByFinca(
     int fincaLocalId,
   ) async {
+    final currentYear = DateTime.now().year;
     final rows = await DatabaseHelper().getVisibleCosechasByFinca(fincaLocalId);
-    final years = rows.map(_extractYear).whereType<int>().toSet().toList()
-      ..sort((left, right) => right.compareTo(left));
+    final currentYearRows = rows
+        .where((row) => (_extractYear(row) ?? currentYear) == currentYear)
+        .toList();
 
     return CosechaExportSummary(
-      totalRecords: rows.length,
-      years: years,
+      totalRecords: currentYearRows.length,
+      years: currentYearRows.isEmpty ? const [] : [currentYear],
     );
+  }
+
+  static Future<List<ExportFileInfo>> getExportHistory({
+    int limit = 20,
+  }) async {
+    final directory = await _resolveExportDirectory();
+    if (!await directory.exists()) {
+      return const [];
+    }
+
+    final files = <ExportFileInfo>[];
+    await for (final entity in directory.list()) {
+      if (entity is! File || path.extension(entity.path).toLowerCase() != '.xlsx') {
+        continue;
+      }
+
+      final stat = await entity.stat();
+      files.add(
+        ExportFileInfo(
+          fileName: path.basename(entity.path),
+          filePath: entity.path,
+          itemCount: 0,
+          modifiedAt: stat.modified,
+        ),
+      );
+    }
+
+    files.sort((left, right) {
+      final rightDate = right.modifiedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final leftDate = left.modifiedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return rightDate.compareTo(leftDate);
+    });
+
+    return files.take(limit).toList();
+  }
+
+  static Future<void> deleteExportFile(String filePath) async {
+    final file = File(filePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 
   static Future<ExportBatchResult> exportActividades({
@@ -127,26 +171,14 @@ class ExcelExportService {
       for (var rowIndex = 0; rowIndex < chunks[index].length; rowIndex++) {
         final rowNumber = 10 + rowIndex;
         final actividad = chunks[index][rowIndex];
-        _setCellString(
-          sheet,
-          'A$rowNumber',
-          (actividad['actividad'] ?? '').toString(),
-        );
-        _setCellString(
-          sheet,
-          'C$rowNumber',
-          _formatDate(actividad['fecha']),
-        );
+        _setCellString(sheet, 'A$rowNumber', (actividad['actividad'] ?? '').toString());
+        _setCellString(sheet, 'C$rowNumber', _formatDate(actividad['fecha']));
         _setCellString(
           sheet,
           'D$rowNumber',
           (actividad['aplicaciones'] ?? '').toString(),
         );
-        _setCellString(
-          sheet,
-          'E$rowNumber',
-          (actividad['dosis'] ?? '').toString(),
-        );
+        _setCellString(sheet, 'E$rowNumber', (actividad['dosis'] ?? '').toString());
         _setCellString(
           sheet,
           'F$rowNumber',
@@ -165,6 +197,7 @@ class ExcelExportService {
           fileName: fileName,
           filePath: outputFile.path,
           itemCount: chunks[index].length,
+          modifiedAt: DateTime.now(),
         ),
       );
     }
@@ -204,60 +237,24 @@ class ExcelExportService {
       final sheet = _loadXmlFile(archive, _insumosSheetPath);
 
       _setCellString(sheet, 'B8', _producerName);
-      _setCellString(
-        sheet,
-        'E8',
-        (finca?['ubicacion_texto'] ?? '').toString(),
-      );
-      _setCellString(
-        sheet,
-        'B10',
-        (lote['tipo_cafe'] ?? '').toString(),
-      );
-      _setCellString(
-        sheet,
-        'D10',
-        _formatNumber(lote['hectareas_lote']),
-      );
-      _setCellString(
-        sheet,
-        'F10',
-        loteName,
-      );
+      _setCellString(sheet, 'E8', (finca?['ubicacion_texto'] ?? '').toString());
+      _setCellString(sheet, 'B10', (lote['tipo_cafe'] ?? '').toString());
+      _setCellString(sheet, 'D10', _formatNumber(lote['hectareas_lote']));
+      _setCellString(sheet, 'F10', loteName);
 
       for (var rowIndex = 0; rowIndex < chunks[index].length; rowIndex++) {
         final rowNumber = 13 + rowIndex;
         final insumo = chunks[index][rowIndex];
-        _setCellString(
-          sheet,
-          'A$rowNumber',
-          (insumo['insumo'] ?? '').toString(),
-        );
+        _setCellString(sheet, 'A$rowNumber', (insumo['insumo'] ?? '').toString());
         _setCellString(
           sheet,
           'B$rowNumber',
           (insumo['ingredientes_activos'] ?? '').toString(),
         );
-        _setCellString(
-          sheet,
-          'C$rowNumber',
-          _formatDate(insumo['fecha']),
-        );
-        _setCellString(
-          sheet,
-          'D$rowNumber',
-          (insumo['tipo'] ?? '').toString(),
-        );
-        _setCellString(
-          sheet,
-          'E$rowNumber',
-          (insumo['origen'] ?? '').toString(),
-        );
-        _setCellString(
-          sheet,
-          'F$rowNumber',
-          (insumo['factura'] ?? '').toString(),
-        );
+        _setCellString(sheet, 'C$rowNumber', _formatDate(insumo['fecha']));
+        _setCellString(sheet, 'D$rowNumber', (insumo['tipo'] ?? '').toString());
+        _setCellString(sheet, 'E$rowNumber', (insumo['origen'] ?? '').toString());
+        _setCellString(sheet, 'F$rowNumber', (insumo['factura'] ?? '').toString());
       }
 
       _replaceXmlFile(archive, _insumosSheetPath, sheet);
@@ -271,6 +268,7 @@ class ExcelExportService {
           fileName: fileName,
           filePath: outputFile.path,
           itemCount: chunks[index].length,
+          modifiedAt: DateTime.now(),
         ),
       );
     }
@@ -290,85 +288,68 @@ class ExcelExportService {
       throw Exception('No se encontró la finca seleccionada.');
     }
 
+    final currentYear = DateTime.now().year;
     final cosechas = await database.getVisibleCosechasByFinca(fincaLocalId);
-    if (cosechas.isEmpty) {
-      throw Exception('Esta finca aún no tiene cosechas para exportar.');
+    final currentYearRows = cosechas
+        .where((row) => (_extractYear(row) ?? currentYear) == currentYear)
+        .toList();
+    if (currentYearRows.isEmpty) {
+      throw Exception('Esta finca aún no tiene cosechas del año actual para exportar.');
     }
-
-    final groupedByYear = <int, List<Map<String, dynamic>>>{};
-    for (final cosecha in cosechas) {
-      final year = _extractYear(cosecha) ?? DateTime.now().year;
-      groupedByYear.putIfAbsent(year, () => []).add(cosecha);
-    }
-
-    final years = groupedByYear.keys.toList()
-      ..sort((left, right) => right.compareTo(left));
 
     final files = <ExportFileInfo>[];
     final fincaName = (finca['nombre'] ?? 'finca').toString();
+    final chunks = _chunkRows(currentYearRows, _cosechasRowsPerFile);
 
-    for (final year in years) {
-      final yearRows = groupedByYear[year] ?? const [];
-      final chunks = _chunkRows(yearRows, _cosechasRowsPerFile);
+    for (var index = 0; index < chunks.length; index++) {
+      final archive = await _loadArchiveFromAsset(_cosechasTemplateAsset);
+      final sheet = _loadXmlFile(archive, _cosechasSheetPath);
+      final chunk = chunks[index];
 
-      for (var index = 0; index < chunks.length; index++) {
-        final archive = await _loadArchiveFromAsset(_cosechasTemplateAsset);
-        final sheet = _loadXmlFile(archive, _cosechasSheetPath);
-        final chunk = chunks[index];
+      _setCellString(sheet, 'B5', _producerName);
+      _setCellString(sheet, 'E5', currentYear.toString());
 
-        _setCellString(sheet, 'B5', _producerName);
-        _setCellString(sheet, 'E5', year.toString());
+      double totalCereza = 0;
+      double totalPergamino = 0;
 
-        double totalCereza = 0;
-        double totalPergamino = 0;
+      for (var rowIndex = 0; rowIndex < chunk.length; rowIndex++) {
+        final rowNumber = 7 + rowIndex;
+        final cosecha = chunk[rowIndex];
+        final kilosCereza = DatabaseHelper.toDouble(cosecha['kilos_cereza']) ?? 0;
+        final kilosPergamino =
+            DatabaseHelper.toDouble(cosecha['kilos_pergamino']) ?? 0;
 
-        for (var rowIndex = 0; rowIndex < chunk.length; rowIndex++) {
-          final rowNumber = 7 + rowIndex;
-          final cosecha = chunk[rowIndex];
-          final kilosCereza =
-              DatabaseHelper.toDouble(cosecha['kilos_cereza']) ?? 0;
-          final kilosPergamino =
-              DatabaseHelper.toDouble(cosecha['kilos_pergamino']) ?? 0;
+        totalCereza += kilosCereza;
+        totalPergamino += kilosPergamino;
 
-          totalCereza += kilosCereza;
-          totalPergamino += kilosPergamino;
-
-          _setCellString(
-            sheet,
-            'A$rowNumber',
-            _formatDate(cosecha['fecha']),
-          );
-          _setCellNumber(sheet, 'B$rowNumber', kilosCereza);
-          _setCellNumber(sheet, 'C$rowNumber', kilosPergamino);
-          _setCellString(
-            sheet,
-            'D$rowNumber',
-            (cosecha['proceso'] ?? '').toString(),
-          );
-          _setCellString(
-            sheet,
-            'E$rowNumber',
-            (finca['ubicacion_texto'] ?? '').toString(),
-          );
-          _setCellString(sheet, 'F$rowNumber', fincaName);
-        }
-
-        _setCellNumber(sheet, 'B18', totalCereza);
-        _setCellNumber(sheet, 'C18', totalPergamino);
-
-        _replaceXmlFile(archive, _cosechasSheetPath, sheet);
-
-        final partSuffix = chunks.length > 1 ? '_parte_${index + 1}' : '';
-        final fileName = 'cosechas_${_slug(fincaName)}_$year$partSuffix.xlsx';
-        final outputFile = await _writeArchiveToFile(archive, fileName);
-        files.add(
-          ExportFileInfo(
-            fileName: fileName,
-            filePath: outputFile.path,
-            itemCount: chunk.length,
-          ),
+        _setCellString(sheet, 'A$rowNumber', _formatDate(cosecha['fecha']));
+        _setCellNumber(sheet, 'B$rowNumber', kilosCereza);
+        _setCellNumber(sheet, 'C$rowNumber', kilosPergamino);
+        _setCellString(sheet, 'D$rowNumber', (cosecha['proceso'] ?? '').toString());
+        _setCellString(
+          sheet,
+          'E$rowNumber',
+          (finca['ubicacion_texto'] ?? '').toString(),
         );
+        _setCellString(sheet, 'F$rowNumber', fincaName);
       }
+
+      _setCellNumber(sheet, 'B18', totalCereza);
+      _setCellNumber(sheet, 'C18', totalPergamino);
+      _replaceXmlFile(archive, _cosechasSheetPath, sheet);
+
+      final partSuffix = chunks.length > 1 ? '_parte_${index + 1}' : '';
+      final fileName =
+          'cosechas_${_slug(fincaName)}_$currentYear$partSuffix.xlsx';
+      final outputFile = await _writeArchiveToFile(archive, fileName);
+      files.add(
+        ExportFileInfo(
+          fileName: fileName,
+          filePath: outputFile.path,
+          itemCount: chunk.length,
+          modifiedAt: DateTime.now(),
+        ),
+      );
     }
 
     return ExportBatchResult(
@@ -389,8 +370,7 @@ class ExcelExportService {
   static XmlDocument _loadXmlFile(Archive archive, String filePath) {
     final file = archive.findFile(filePath);
     if (file == null) {
-      throw Exception(
-          'No se encontró el archivo $filePath dentro de la plantilla.');
+      throw Exception('No se encontró el archivo $filePath dentro de la plantilla.');
     }
 
     final content = file.content;
@@ -435,9 +415,7 @@ class ExcelExportService {
     Directory? baseDirectory = await getExternalStorageDirectory();
     baseDirectory ??= await getApplicationDocumentsDirectory();
 
-    final exportDirectory = Directory(
-      path.join(baseDirectory.path, 'exports'),
-    );
+    final exportDirectory = Directory(path.join(baseDirectory.path, 'exports'));
     await exportDirectory.create(recursive: true);
     return exportDirectory;
   }
@@ -471,12 +449,7 @@ class ExcelExportService {
     _setAttribute(cell, 't', 'inlineStr');
     final textAttributes = <XmlAttribute>[];
     if (value.startsWith(' ') || value.endsWith(' ')) {
-      textAttributes.add(
-        XmlAttribute(
-          XmlName('space', 'xml'),
-          'preserve',
-        ),
-      );
+      textAttributes.add(XmlAttribute(XmlName('space', 'xml'), 'preserve'));
     }
 
     cell.children.add(
@@ -568,23 +541,14 @@ class ExcelExportService {
   }
 
   static void _setAttribute(XmlElement element, String name, String value) {
-    final index = element.attributes.indexWhere(
-      (attribute) => attribute.name.local == name,
-    );
+    final index =
+        element.attributes.indexWhere((attribute) => attribute.name.local == name);
     if (index >= 0) {
-      element.attributes[index] = XmlAttribute(
-        XmlName(name),
-        value,
-      );
+      element.attributes[index] = XmlAttribute(XmlName(name), value);
       return;
     }
 
-    element.attributes.add(
-      XmlAttribute(
-        XmlName(name),
-        value,
-      ),
-    );
+    element.attributes.add(XmlAttribute(XmlName(name), value));
   }
 
   static void _removeAttribute(XmlElement element, String name) {
@@ -613,6 +577,13 @@ class ExcelExportService {
 
     final parsedDate = DateTime.tryParse(value);
     if (parsedDate == null) {
+      final match = RegExp(r'\b\d{4}-\d{2}-\d{2}\b').firstMatch(value);
+      if (match != null) {
+        final normalized = DateTime.tryParse(match.group(0)!);
+        if (normalized != null) {
+          return DateFormat('dd/MM/yyyy').format(normalized);
+        }
+      }
       return value;
     }
 
@@ -655,14 +626,19 @@ class ExcelExportService {
   }
 
   static String _slug(String value) {
-    final normalized = value
-        .toLowerCase()
-        .replaceAll('á', 'a')
-        .replaceAll('é', 'e')
-        .replaceAll('í', 'i')
-        .replaceAll('ó', 'o')
-        .replaceAll('ú', 'u')
-        .replaceAll('ñ', 'n');
+    final replacements = {
+      'á': 'a',
+      'é': 'e',
+      'í': 'i',
+      'ó': 'o',
+      'ú': 'u',
+      'ñ': 'n',
+    };
+
+    var normalized = value.toLowerCase();
+    replacements.forEach((key, replacement) {
+      normalized = normalized.replaceAll(key, replacement);
+    });
 
     final cleaned = normalized
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')

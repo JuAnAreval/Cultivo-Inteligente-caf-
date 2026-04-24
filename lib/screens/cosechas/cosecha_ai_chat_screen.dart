@@ -5,6 +5,7 @@ import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
 import 'package:app_flutter_ai/core/services/cosechas/cosecha_ai_service.dart';
 import 'package:app_flutter_ai/core/services/cosechas/cosecha_service.dart';
+import 'package:app_flutter_ai/core/widgets/cultiva_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,7 +34,6 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
   final TextEditingController _kilosCerezaController = TextEditingController();
   final TextEditingController _kilosPergaminoController =
       TextEditingController();
-  final TextEditingController _anioController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final stt.SpeechToText _speech = stt.SpeechToText();
   final LlmService _llmService = LlmService();
@@ -42,6 +42,11 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
   late final CosechaAiService _cosechaAiService = CosechaAiService(_llmService);
 
   final List<_ChatMessage> _messages = [];
+  final List<String> _quickSuggestions = const [
+    'Hoy recolectamos 320 kilos de cereza y 72 de pergamino, proceso lavado.',
+    'Registra una cosecha de 180 kilos de cereza y 45 de pergamino del día de hoy, proceso miel.',
+    'Ayer hubo cosecha natural con 210 kilos de cereza y 50 de pergamino.',
+  ];
 
   String _proceso = '';
   bool _isListening = false;
@@ -58,7 +63,6 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
   @override
   void initState() {
     super.initState();
-    _anioController.text = DateTime.now().year.toString();
     _initializeLlm();
   }
 
@@ -69,7 +73,6 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
     _fechaController.dispose();
     _kilosCerezaController.dispose();
     _kilosPergaminoController.dispose();
-    _anioController.dispose();
     _scrollController.dispose();
     _dio.close();
     super.dispose();
@@ -317,13 +320,13 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
       return;
     }
 
-    _fechaController.text = (safeDraft['fecha'] ?? '').toString();
+    _fechaController.text =
+        _normalizeDateText((safeDraft['fecha'] ?? '').toString());
     _kilosCerezaController.text =
-        (safeDraft['kilos_cereza'] ?? '').toString();
+        _normalizeNumberText((safeDraft['kilos_cereza'] ?? '').toString());
     _kilosPergaminoController.text =
-        (safeDraft['kilos_pergamino'] ?? '').toString();
-    _proceso = (safeDraft['proceso'] ?? '').toString();
-    _anioController.text = (safeDraft['anio'] ?? '').toString();
+        _normalizeNumberText((safeDraft['kilos_pergamino'] ?? '').toString());
+    _proceso = _normalizeProceso((safeDraft['proceso'] ?? '').toString());
 
     setState(() {
       _hasDraft = true;
@@ -338,15 +341,59 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
   }
 
   Future<void> _saveDraft() async {
-    if (_fechaController.text.trim().isEmpty ||
-        (_kilosCerezaController.text.trim().isEmpty &&
-            _kilosPergaminoController.text.trim().isEmpty)) {
+    final formattedDate = _normalizeDateText(_fechaController.text.trim());
+    final kilosCereza =
+        _normalizeNumberText(_kilosCerezaController.text.trim());
+    final kilosPergamino = _normalizeNumberText(
+      _kilosPergaminoController.text.trim(),
+    );
+
+    if (!_isCurrentYearDate(formattedDate)) {
       _showSnackBar(
-        'Completa la fecha y al menos un valor de kilos.',
+        'La fecha debe tener formato YYYY-MM-DD y ser del año actual.',
         AppColors.danger,
       );
       return;
     }
+
+    if (kilosCereza.isEmpty || kilosPergamino.isEmpty) {
+      _showSnackBar(
+        'Completa los kilos de cereza y de pergamino.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    if (_parseNumber(kilosCereza) == null ||
+        _parseNumber(kilosPergamino) == null) {
+      _showSnackBar(
+        'Los kilos deben ser números válidos.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    if ((_parseNumber(kilosCereza) ?? 0) < 0 ||
+        (_parseNumber(kilosPergamino) ?? 0) < 0) {
+      _showSnackBar(
+        'Los kilos no pueden ser negativos.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    if (_normalizeProceso(_proceso).isEmpty) {
+      _showSnackBar(
+        'Selecciona el proceso de la cosecha.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    _fechaController.text = formattedDate;
+    _kilosCerezaController.text = kilosCereza;
+    _kilosPergaminoController.text = kilosPergamino;
+    _proceso = _normalizeProceso(_proceso);
 
     FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
@@ -354,11 +401,11 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
     try {
       await CosechaService.create({
         'id_finca': widget.farmId,
-        'fecha': _fechaController.text.trim(),
-        'kilos_cereza': _kilosCerezaController.text.trim(),
-        'kilos_pergamino': _kilosPergaminoController.text.trim(),
+        'fecha': formattedDate,
+        'kilos_cereza': _parseNumber(kilosCereza),
+        'kilos_pergamino': _parseNumber(kilosPergamino),
         'proceso': _proceso,
-        'anio': _anioController.text.trim(),
+        'anio': _extractYear(formattedDate),
       });
 
       if (!mounted) {
@@ -377,6 +424,93 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  void _applySuggestion(String suggestion) {
+    _messageController.text = suggestion;
+    _messageController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _messageController.text.length),
+    );
+  }
+
+  String _normalizeDateText(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    final isoMatch = RegExp(r'\b\d{4}-\d{2}-\d{2}\b').firstMatch(trimmed);
+    if (isoMatch != null) {
+      return isoMatch.group(0) ?? '';
+    }
+
+    final slashMatch =
+        RegExp(r'\b(\d{4})/(\d{2})/(\d{2})\b').firstMatch(trimmed);
+    if (slashMatch != null) {
+      return '${slashMatch.group(1)}-${slashMatch.group(2)}-${slashMatch.group(3)}';
+    }
+
+    return trimmed;
+  }
+
+  String _normalizeNumberText(String value) {
+    final normalized = value.trim().replaceAll(',', '.');
+    if (normalized.isEmpty) {
+      return '';
+    }
+
+    final parsed = double.tryParse(normalized);
+    if (parsed == null) {
+      return normalized;
+    }
+
+    return parsed == parsed.truncateToDouble()
+        ? parsed.toInt().toString()
+        : parsed.toString();
+  }
+
+  String _normalizeProceso(String value) {
+    switch (value.trim().toUpperCase()) {
+      case 'MIEL':
+      case 'NATURAL':
+      case 'LAVADO':
+        return value.trim().toUpperCase();
+      default:
+        return '';
+    }
+  }
+
+  bool _isCurrentYearDate(String value) {
+    final normalized = _normalizeDateText(value);
+    final parts = normalized.split('-');
+    if (parts.length != 3) {
+      return false;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return false;
+    }
+
+    if (year != DateTime.now().year) {
+      return false;
+    }
+
+    final parsed = DateTime.tryParse(normalized);
+    return parsed != null &&
+        parsed.year == year &&
+        parsed.month == month &&
+        parsed.day == day;
+  }
+
+  double? _parseNumber(String value) {
+    return double.tryParse(value.replaceAll(',', '.'));
+  }
+
+  int _extractYear(String formattedDate) {
+    return int.tryParse(formattedDate.split('-').first) ?? DateTime.now().year;
   }
 
   void _scrollToBottom() {
@@ -401,94 +535,178 @@ class _CosechaAiChatScreenState extends State<CosechaAiChatScreen> {
     );
   }
 
+  Future<bool> _confirmExitIfNeeded() async {
+    if (!_hasDraft) {
+      return true;
+    }
+
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('¿Estás seguro de salir?'),
+          content: const Text(
+            'Si sales ahora, se borrará el borrador generado por la IA y tendrás que volver a llenar la información.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Seguir aquí'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.clayStrong,
+                foregroundColor: AppColors.surface,
+              ),
+              child: const Text('Salir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return shouldLeave ?? false;
+  }
+
+  Future<void> _handleExit() async {
+    final shouldLeave = await _confirmExitIfNeeded();
+    if (!mounted || !shouldLeave) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isBlocked = _isDownloading || _isPreparing || _errorText != null;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Chat IA - ${widget.farmName}'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              children: [
-                _CompactHeaderCard(farmName: widget.farmName),
-                const SizedBox(height: 12),
-                const _RequiredDataCard(
-                  title: 'Datos que necesito',
-                  items: [
-                    'Fecha de la cosecha',
-                    'Kilos de cereza',
-                    'Kilos de pergamino',
-                    'Proceso, por ejemplo miel, natural o lavado',
-                    'Ano de la cosecha',
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (isBlocked)
-                  _ModelStatusCard(
-                    isDownloading: _isDownloading,
-                    isError: _errorText != null,
-                    progress: _downloadProgress,
-                    status: _errorText ?? _statusText,
-                    onRetry: _errorText == null ? null : _initializeLlm,
-                  )
-                else ...[
-                  if (_messages.isEmpty) const _IntroCard(),
-                  ..._messages.map((message) => _ChatBubble(message: message)),
-                  if (_hasDraft) ...[
-                    const SizedBox(height: 12),
-                    _AiDraftWrapper(
-                      child: _DraftCard(
-                        fechaController: _fechaController,
-                        kilosCerezaController: _kilosCerezaController,
-                        kilosPergaminoController: _kilosPergaminoController,
-                        anioController: _anioController,
-                        proceso: _proceso,
-                        onProcesoChanged: (value) {
-                          setState(() => _proceso = value ?? '');
-                        },
-                        onSave: _isSaving ? null : _saveDraft,
-                        isSaving: _isSaving,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        await _handleExit();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        backgroundColor: AppColors.background,
+        appBar: buildCultivaSecondaryAppBar(
+          context: context,
+          title: 'Chat IA',
+          leading: IconButton(
+            onPressed: _handleExit,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: [
+                  _CompactHeaderCard(farmName: widget.farmName),
+                  const SizedBox(height: 12),
+                  const _RequiredDataCard(
+                    title: 'Datos que necesito',
+                    items: [
+                      'Fecha de la cosecha',
+                      'Kilos de cereza',
+                      'Kilos de pergamino',
+                      'Proceso, por ejemplo miel, natural o lavado',
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (isBlocked)
+                    _ModelStatusCard(
+                      isDownloading: _isDownloading,
+                      isError: _errorText != null,
+                      progress: _downloadProgress,
+                      status: _errorText ?? _statusText,
+                      onRetry: _errorText == null ? null : _initializeLlm,
+                    )
+                  else ...[
+                    if (_messages.isEmpty)
+                      _SuggestionCard(
+                        suggestions: _quickSuggestions,
+                        onSelected: _applySuggestion,
                       ),
+                    ..._messages
+                        .map((message) => _ChatBubble(message: message)),
+                    if (_hasDraft) ...[
+                      const SizedBox(height: 12),
+                      _AiDraftWrapper(
+                        child: _DraftCard(
+                          fechaController: _fechaController,
+                          kilosCerezaController: _kilosCerezaController,
+                          kilosPergaminoController: _kilosPergaminoController,
+                          proceso: _proceso,
+                          onProcesoChanged: (value) {
+                            setState(() => _proceso = value ?? '');
+                          },
+                          onSave: _isSaving ? null : _saveDraft,
+                          isSaving: _isSaving,
+                        ),
+                      ),
+                    ],
+                  ],
+                  SizedBox(height: viewInsets > 0 ? 12 : 88 + bottomSafeArea),
+                ],
+              ),
+            ),
+            if (!isBlocked)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  0,
+                  12,
+                  viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_messages.isNotEmpty) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _quickSuggestions
+                                .map(
+                                  (suggestion) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _SuggestionChip(
+                                      label: suggestion,
+                                      onTap: () => _applySuggestion(suggestion),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    _ComposerCard(
+                      controller: _messageController,
+                      isListening: _isListening,
+                      isProcessing: _isProcessing,
+                      onListen: _listen,
+                      onSend: _sendMessage,
                     ),
                   ],
-                ],
-                SizedBox(height: viewInsets > 0 ? 12 : 88 + bottomSafeArea),
-              ],
-            ),
-          ),
-          if (!isBlocked)
-            AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.fromLTRB(
-                12,
-                0,
-                12,
-                viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
+                ),
               ),
-              child: _ComposerCard(
-                controller: _messageController,
-                isListening: _isListening,
-                isProcessing: _isProcessing,
-                onListen: _listen,
-                onSend: _sendMessage,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -530,7 +748,7 @@ class _CompactHeaderCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Describe la cosecha y la IA te devuelve un borrador editable.',
+            'Cuéntame la cosecha y la IA te devuelve un borrador listo para revisar.',
             style: TextStyle(
               color: AppColors.textSecondary,
               height: 1.35,
@@ -618,12 +836,16 @@ class _ComposerCard extends StatelessWidget {
                   backgroundColor: isListening
                       ? AppColors.danger.withValues(alpha: 0.14)
                       : AppColors.backgroundSoft,
+                  side: BorderSide(
+                    color: isListening
+                        ? AppColors.danger.withValues(alpha: 0.35)
+                        : Colors.transparent,
+                  ),
                 ),
                 icon: Icon(
                   isListening ? Icons.mic : Icons.mic_none,
-                  color: isListening
-                      ? AppColors.danger
-                      : AppColors.textSecondary,
+                  color:
+                      isListening ? AppColors.danger : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(width: 6),
@@ -650,8 +872,14 @@ class _ComposerCard extends StatelessWidget {
   }
 }
 
-class _IntroCard extends StatelessWidget {
-  const _IntroCard();
+class _SuggestionCard extends StatelessWidget {
+  const _SuggestionCard({
+    required this.suggestions,
+    required this.onSelected,
+  });
+
+  final List<String> suggestions;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -663,28 +891,75 @@ class _IntroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.sand),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Ejemplos rápidos',
+          const Text(
+            'Sugerencias rápidas',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
               fontSize: 15,
             ),
           ),
-          SizedBox(height: 10),
-          Text(
-            'Hoy recolectamos 320 kilos de cereza y 72 de pergamino, proceso lavado.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Ayer hubo cosecha natural con 180 kilos de cereza en la tarde.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: suggestions
+                  .map(
+                    (suggestion) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _SuggestionChip(
+                        label: suggestion,
+                        onTap: () => onSelected(suggestion),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSoft,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.sand),
+          ),
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -835,7 +1110,6 @@ class _DraftCard extends StatelessWidget {
     required this.fechaController,
     required this.kilosCerezaController,
     required this.kilosPergaminoController,
-    required this.anioController,
     required this.proceso,
     required this.onProcesoChanged,
     required this.onSave,
@@ -845,7 +1119,6 @@ class _DraftCard extends StatelessWidget {
   final TextEditingController fechaController;
   final TextEditingController kilosCerezaController;
   final TextEditingController kilosPergaminoController;
-  final TextEditingController anioController;
   final String proceso;
   final ValueChanged<String?> onProcesoChanged;
   final VoidCallback? onSave;
@@ -902,18 +1175,12 @@ class _DraftCard extends StatelessWidget {
             label: 'Proceso',
             value: proceso,
             items: const [
-              DropdownMenuItem(value: '', child: Text('Sin definir')),
+              DropdownMenuItem(value: '', child: Text('Selecciona')),
               DropdownMenuItem(value: 'MIEL', child: Text('MIEL')),
               DropdownMenuItem(value: 'NATURAL', child: Text('NATURAL')),
               DropdownMenuItem(value: 'LAVADO', child: Text('LAVADO')),
             ],
             onChanged: onProcesoChanged,
-          ),
-          const SizedBox(height: 12),
-          _DraftField(
-            label: 'Año',
-            controller: anioController,
-            hint: 'Ej: 2026',
           ),
           const SizedBox(height: 16),
           SizedBox(

@@ -1,7 +1,7 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/export/excel_export_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -18,6 +18,7 @@ class _ExportScreenState extends State<ExportScreen> {
   bool _isLoading = true;
   bool _isExportingLote = false;
   bool _isExportingCosechas = false;
+  bool _isLoadingHistory = false;
   String? _errorMessage;
 
   List<Map<String, dynamic>> _fincas = const [];
@@ -71,6 +72,7 @@ class _ExportScreenState extends State<ExportScreen> {
       final cosechaSummary = fincaCosechaId == null
           ? const CosechaExportSummary(totalRecords: 0, years: [])
           : await ExcelExportService.getCosechaSummaryByFinca(fincaCosechaId);
+      final history = await ExcelExportService.getExportHistory(limit: 20);
 
       if (!mounted) {
         return;
@@ -85,6 +87,7 @@ class _ExportScreenState extends State<ExportScreen> {
         _actividadesCount = actividadesCount;
         _insumosCount = insumosCount;
         _cosechaSummary = cosechaSummary;
+        _recentFiles = history;
         _isLoading = false;
       });
     } catch (error) {
@@ -95,6 +98,28 @@ class _ExportScreenState extends State<ExportScreen> {
         _errorMessage = error.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    if (mounted) {
+      setState(() => _isLoadingHistory = true);
+    }
+
+    try {
+      final history = await ExcelExportService.getExportHistory(limit: 20);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _recentFiles = history;
+        _isLoadingHistory = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isLoadingHistory = false);
     }
   }
 
@@ -238,6 +263,7 @@ class _ExportScreenState extends State<ExportScreen> {
     if (loteId == null) {
       return;
     }
+
     setState(() => _isExportingLote = true);
 
     try {
@@ -247,21 +273,16 @@ class _ExportScreenState extends State<ExportScreen> {
       final insumos = await ExcelExportService.exportInsumos(
         loteLocalId: loteId,
       );
-      final files = [...actividades.files, ...insumos.files];
-      _rememberFiles(files);
+      final generatedFiles = [...actividades.files, ...insumos.files];
+      await _refreshHistoryAfterExport();
 
       if (!mounted) {
         return;
       }
-      final totalItems = actividades.totalItems + insumos.totalItems;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Se generaron ${files.length} archivo(s) con $totalItems registro(s) del lote.',
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+
+      _showSuccessSnackBar(
+        message: 'Reporte generado correctamente',
+        fileToOpen: generatedFiles.isEmpty ? null : generatedFiles.first,
       );
     } catch (error) {
       _showError(error);
@@ -277,25 +298,22 @@ class _ExportScreenState extends State<ExportScreen> {
     if (fincaId == null) {
       return;
     }
+
     setState(() => _isExportingCosechas = true);
 
     try {
       final result = await ExcelExportService.exportCosechas(
         fincaLocalId: fincaId,
       );
-      _rememberFiles(result.files);
+      await _refreshHistoryAfterExport();
 
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Se generaron ${result.totalFiles} archivo(s) con ${result.totalItems} cosecha(s).',
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+
+      _showSuccessSnackBar(
+        message: 'Reporte generado correctamente',
+        fileToOpen: result.files.isEmpty ? null : result.files.first,
       );
     } catch (error) {
       _showError(error);
@@ -306,18 +324,32 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
-  void _rememberFiles(List<ExportFileInfo> files) {
-    if (files.isEmpty || !mounted) {
+  Future<void> _refreshHistoryAfterExport() async {
+    final history = await ExcelExportService.getExportHistory(limit: 20);
+    if (!mounted) {
       return;
     }
-    final combined = [...files, ..._recentFiles];
-    final deduped = <String, ExportFileInfo>{};
-    for (final file in combined) {
-      deduped[file.filePath] = file;
-    }
-    setState(() {
-      _recentFiles = deduped.values.take(6).toList();
-    });
+    setState(() => _recentFiles = history);
+  }
+
+  void _showSuccessSnackBar({
+    required String message,
+    ExportFileInfo? fileToOpen,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        action: fileToOpen == null
+            ? null
+            : SnackBarAction(
+                label: 'Ver',
+                textColor: AppColors.surface,
+                onPressed: () => _openFile(fileToOpen.filePath),
+              ),
+      ),
+    );
   }
 
   void _showError(Object error) {
@@ -328,20 +360,6 @@ class _ExportScreenState extends State<ExportScreen> {
       SnackBar(
         content: Text('No se pudo generar el Excel: $error'),
         backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _copyPath(String value) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Ruta copiada al portapapeles.'),
-        backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -377,11 +395,216 @@ class _ExportScreenState extends State<ExportScreen> {
     );
   }
 
-  Widget _buildFincaView() {
-    return _SectionCard(
-      title: 'Vista de finca',
-      subtitle:
-          'Este modo se centra unicamente en la exportacion de cosechas.',
+  Future<void> _deleteFile(ExportFileInfo file) async {
+    await ExcelExportService.deleteExportFile(file.filePath);
+    await _loadHistory();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Archivo eliminado.'),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _showHistorySheet() async {
+    await _loadHistory();
+    if (!mounted) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> refreshModalHistory() async {
+              setModalState(() {});
+              await _loadHistory();
+              if (mounted) {
+                setModalState(() {});
+              }
+            }
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.72,
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+              decoration: const BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: AppColors.sand,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Historial de exportaciones',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: _isLoadingHistory
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.moss,
+                            ),
+                          )
+                        : _recentFiles.isEmpty
+                            ? const _EmptyHistoryState()
+                            : ListView.separated(
+                                itemCount: _recentFiles.length,
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final file = _recentFiles[index];
+                                  return _HistoryRow(
+                                    file: file,
+                                    onOpen: () => _openFile(file.filePath),
+                                    onShare: () => _shareFile(file),
+                                    onDelete: () async {
+                                      await _deleteFile(file);
+                                      await refreshModalHistory();
+                                    },
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Exportar',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                'Genera tus reportes Excel desde los datos guardados en tu celular.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            onTap: _showHistorySheet,
+            borderRadius: BorderRadius.circular(18),
+            child: Ink(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.sand),
+              ),
+              child: const Icon(
+                Icons.history_rounded,
+                color: AppColors.clayStrong,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSegmentedControl() {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SegmentTab(
+              label: 'Finca',
+              subtitle: 'Cosechas',
+              icon: Icons.agriculture_rounded,
+              isSelected: _selectedMode == _ExportMode.finca,
+              onTap: () => setState(() => _selectedMode = _ExportMode.finca),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _SegmentTab(
+              label: 'Lote',
+              subtitle: 'Actividades e insumos',
+              icon: Icons.grid_view_rounded,
+              isSelected: _selectedMode == _ExportMode.lote,
+              onTap: () => setState(() => _selectedMode = _ExportMode.lote),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFincaMode() {
+    final hasData = _cosechaSummary.totalRecords > 0;
+    final yearLabel = _cosechaSummary.years.isEmpty
+        ? DateTime.now().year.toString()
+        : _cosechaSummary.years.first.toString();
+
+    return _ContentCard(
+      eyebrow: 'Modo finca',
+      title: 'Exporta el consolidado de cosechas',
+      description:
+          'Ideal para sacar el reporte anual de una finca sin navegar por más pantallas.',
       child: Column(
         children: [
           _SelectionField(
@@ -399,31 +622,29 @@ class _ExportScreenState extends State<ExportScreen> {
                 .toList(),
             onChanged: _changeFincaForCosechas,
           ),
-          const SizedBox(height: 14),
-          _MetricCard(
-            label: 'Cosechas',
-            value: '${_cosechaSummary.totalRecords}',
-            helper: _cosechaSummary.years.isEmpty
-                ? 'Sin registros aun'
-                : 'Anios: ${_cosechaSummary.years.join(', ')}',
-            icon: Icons.agriculture_rounded,
-            accent: AppColors.clayStrong,
-            tint: const Color(0xFFF3E3CC),
-          ),
           const SizedBox(height: 16),
+          _SingleStatCard(
+            icon: Icons.agriculture_rounded,
+            label: 'Cosechas registradas',
+            value: '${_cosechaSummary.totalRecords}',
+            footer: 'Año $yearLabel',
+            accent: AppColors.clayStrong,
+            isEmpty: !hasData,
+            emptyText: 'Sin cosechas registradas este año',
+          ),
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _selectedFincaForCosechasId == null ||
-                      _isExportingCosechas
+              onPressed: _selectedFincaForCosechasId == null || _isExportingCosechas
                   ? null
                   : _exportCosechas,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.clayStrong,
                 foregroundColor: AppColors.surface,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
               icon: _isExportingCosechas
@@ -436,7 +657,9 @@ class _ExportScreenState extends State<ExportScreen> {
                       ),
                     )
                   : const Icon(Icons.file_download_outlined),
-              label: const Text('Exportar cosechas'),
+              label: Text(
+                _isExportingCosechas ? 'Generando...' : 'Exportar cosechas',
+              ),
             ),
           ),
         ],
@@ -444,11 +667,12 @@ class _ExportScreenState extends State<ExportScreen> {
     );
   }
 
-  Widget _buildLoteView() {
-    return _SectionCard(
-      title: 'Vista de lote',
-      subtitle:
-          'Selecciona una finca y un lote para exportar actividades e insumos de ese lugar.',
+  Widget _buildLoteMode() {
+    return _ContentCard(
+      eyebrow: 'Modo lote',
+      title: 'Exporta el detalle operativo del lote',
+      description:
+          'Aquí puedes sacar un reporte combinado con actividades e insumos del lugar seleccionado.',
       child: Column(
         children: [
           _SelectionField(
@@ -466,7 +690,7 @@ class _ExportScreenState extends State<ExportScreen> {
                 .toList(),
             onChanged: _changeFincaForLotes,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _SelectionField(
             label: 'Lote',
             value: _selectedLoteId,
@@ -482,33 +706,31 @@ class _ExportScreenState extends State<ExportScreen> {
                 .toList(),
             onChanged: _lotes.isEmpty ? null : _changeLote,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: _MetricCard(
-                  label: 'Actividades',
-                  value: '$_actividadesCount',
-                  helper: 'Formato de campo',
+                child: _GridStatCard(
                   icon: Icons.grass_rounded,
+                  label: 'Actividades',
+                  count: _actividadesCount,
                   accent: AppColors.moss,
-                  tint: const Color(0xFFE6F0DC),
+                  emptyText: 'Sin datos',
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: _MetricCard(
-                  label: 'Insumos',
-                  value: '$_insumosCount',
-                  helper: 'Formato de control',
+                child: _GridStatCard(
                   icon: Icons.inventory_2_outlined,
+                  label: 'Insumos',
+                  count: _insumosCount,
                   accent: AppColors.clayStrong,
-                  tint: const Color(0xFFF3E3CC),
+                  emptyText: 'Sin datos',
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -518,9 +740,9 @@ class _ExportScreenState extends State<ExportScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.moss,
                 foregroundColor: AppColors.surface,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
               icon: _isExportingLote
@@ -533,13 +755,18 @@ class _ExportScreenState extends State<ExportScreen> {
                       ),
                     )
                   : const Icon(Icons.file_download_outlined),
-              label: const Text('Exportar actividades e insumos'),
+              label: Text(
+                _isExportingLote
+                    ? 'Generando...'
+                    : 'Exportar actividades e insumos',
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
@@ -560,18 +787,15 @@ class _ExportScreenState extends State<ExportScreen> {
           onRefresh: _loadExportData,
           color: AppColors.moss,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 130),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 132),
             children: [
-              const _ExportHeroCard(),
-              const SizedBox(height: 16),
-              _ModeSwitch(
-                selectedMode: _selectedMode,
-                onChanged: (mode) => setState(() => _selectedMode = mode),
-              ),
-              const SizedBox(height: 16),
+              _buildHeader(),
+              const SizedBox(height: 20),
+              _buildSegmentedControl(),
+              const SizedBox(height: 18),
               if (_isLoading)
                 const Padding(
-                  padding: EdgeInsets.only(top: 36),
+                  padding: EdgeInsets.only(top: 48),
                   child: Center(
                     child: CircularProgressIndicator(color: AppColors.moss),
                   ),
@@ -580,33 +804,26 @@ class _ExportScreenState extends State<ExportScreen> {
                 _MessageCard(
                   icon: Icons.error_outline_rounded,
                   iconColor: AppColors.danger,
-                  title: 'No pudimos cargar exportacion',
+                  title: 'No pudimos cargar exportaciones',
                   message: _errorMessage!,
                   actionLabel: 'Reintentar',
                   onAction: _loadExportData,
                 )
               else if (_fincas.isEmpty)
                 const _MessageCard(
-                  icon: Icons.file_copy_outlined,
-                  iconColor: AppColors.moss,
-                  title: 'Aun no hay fincas para exportar',
+                  icon: Icons.inventory_2_outlined,
+                  iconColor: AppColors.clayStrong,
+                  title: 'Aún no hay datos para exportar',
                   message:
-                      'Primero crea una finca y sus lotes. Despues podras llenar los formatos oficiales con tus registros locales.',
+                      'Primero registra fincas, lotes y actividades para empezar a generar reportes.',
                 )
-              else ...[
-                _selectedMode == _ExportMode.finca
-                    ? _buildFincaView()
-                    : _buildLoteView(),
-                if (_recentFiles.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  _RecentFilesCard(
-                    files: _recentFiles,
-                    onCopyPath: _copyPath,
-                    onOpenFile: _openFile,
-                    onShareFile: _shareFile,
-                  ),
-                ],
-              ],
+              else
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: _selectedMode == _ExportMode.finca
+                      ? _buildFincaMode()
+                      : _buildLoteMode(),
+                ),
             ],
           ),
         ),
@@ -615,181 +832,63 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 }
 
-class _ExportHeroCard extends StatelessWidget {
-  const _ExportHeroCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: const Row(
-        children: [
-          _HeroIcon(),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Exportar formatos',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Genera los Excel oficiales desde la base local del celular.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroIcon extends StatelessWidget {
-  const _HeroIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSoft,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: const Icon(
-        Icons.file_download_outlined,
-        color: AppColors.clayStrong,
-        size: 28,
-      ),
-    );
-  }
-}
-
-class _ModeSwitch extends StatelessWidget {
-  const _ModeSwitch({
-    required this.selectedMode,
-    required this.onChanged,
-  });
-
-  final _ExportMode selectedMode;
-  final ValueChanged<_ExportMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ModeButton(
-              title: 'Finca',
-              subtitle: 'Solo cosechas',
-              icon: Icons.agriculture_rounded,
-              selected: selectedMode == _ExportMode.finca,
-              onTap: () => onChanged(_ExportMode.finca),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _ModeButton(
-              title: 'Lote',
-              subtitle: 'Actividades e insumos',
-              icon: Icons.grid_view_rounded,
-              selected: selectedMode == _ExportMode.lote,
-              onTap: () => onChanged(_ExportMode.lote),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({
-    required this.title,
+class _SegmentTab extends StatelessWidget {
+  const _SegmentTab({
+    required this.label,
     required this.subtitle,
     required this.icon,
-    required this.selected,
+    required this.isSelected,
     required this.onTap,
   });
 
-  final String title;
+  final String label;
   final String subtitle;
   final IconData icon;
-  final bool selected;
+  final bool isSelected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor =
+        isSelected ? AppColors.soil : AppColors.surfaceMuted;
+    final primaryText = isSelected ? AppColors.surface : AppColors.textPrimary;
+    final secondaryText =
+        isSelected ? AppColors.backgroundSoft : AppColors.textSecondary;
+
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? AppColors.backgroundSoft : AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? AppColors.moss : AppColors.surfaceMuted,
-          ),
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.moss.withValues(alpha: 0.14)
-                    : AppColors.backgroundSoft,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? AppColors.moss : AppColors.clayStrong,
-              ),
-            ),
+            Icon(icon, color: primaryText, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    label,
+                    style: TextStyle(
+                      color: primaryText,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: secondaryText,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -802,46 +901,60 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
+class _ContentCard extends StatelessWidget {
+  const _ContentCard({
+    required this.eyebrow,
     required this.title,
-    required this.subtitle,
+    required this.description,
     required this.child,
   });
 
+  final String eyebrow;
   final String title;
-  final String subtitle;
+  final String description;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      key: ValueKey(title),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppColors.sand),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            eyebrow.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.clayStrong,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
             title,
             style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              height: 1.1,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            subtitle,
+            description,
             style: const TextStyle(
               color: AppColors.textSecondary,
               height: 1.45,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           child,
         ],
       ),
@@ -874,23 +987,23 @@ class _SelectionField extends StatelessWidget {
         filled: true,
         fillColor: AppColors.backgroundSoft,
         labelStyle: const TextStyle(color: AppColors.textSecondary),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.sand),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.sand),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.moss, width: 1.6),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: AppColors.moss, width: 1.5),
         ),
       ),
       dropdownColor: AppColors.surface,
       iconEnabledColor: AppColors.clayStrong,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(20),
       style: const TextStyle(
         color: AppColors.textPrimary,
         fontWeight: FontWeight.w600,
@@ -899,44 +1012,140 @@ class _SelectionField extends StatelessWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
+class _SingleStatCard extends StatelessWidget {
+  const _SingleStatCard({
+    required this.icon,
     required this.label,
     required this.value,
-    required this.helper,
-    required this.icon,
+    required this.footer,
     required this.accent,
-    required this.tint,
+    required this.isEmpty,
+    required this.emptyText,
   });
 
+  final IconData icon;
   final String label;
   final String value;
-  final String helper;
-  final IconData icon;
+  final String footer;
   final Color accent;
-  final Color tint;
+  final bool isEmpty;
+  final String emptyText;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSoft,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: isEmpty
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: accent, size: 28),
+                const SizedBox(height: 14),
+                Text(
+                  emptyText,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  footer,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Icon(icon, color: accent, size: 28),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        value,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        footer,
+                        style: const TextStyle(
+                          color: AppColors.clayStrong,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _GridStatCard extends StatelessWidget {
+  const _GridStatCard({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.accent,
+    required this.emptyText,
+  });
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final Color accent;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEmpty = count == 0;
+
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.backgroundSoft,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.sand),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: tint,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: accent),
-          ),
-          const SizedBox(height: 12),
+          Icon(icon, color: accent, size: 24),
+          const SizedBox(height: 14),
           Text(
             label,
             style: const TextStyle(
@@ -944,26 +1153,14 @@ class _MetricCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 26,
+            isEmpty ? emptyText : '$count',
+            style: TextStyle(
+              color: isEmpty ? AppColors.textSecondary : AppColors.textPrimary,
+              fontSize: isEmpty ? 14 : 28,
               fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            helper,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              height: 1.35,
+              height: 1.1,
             ),
           ),
         ],
@@ -972,116 +1169,122 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-class _RecentFilesCard extends StatelessWidget {
-  const _RecentFilesCard({
-    required this.files,
-    required this.onCopyPath,
-    required this.onOpenFile,
-    required this.onShareFile,
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({
+    required this.file,
+    required this.onOpen,
+    required this.onShare,
+    required this.onDelete,
   });
 
-  final List<ExportFileInfo> files;
-  final ValueChanged<String> onCopyPath;
-  final ValueChanged<String> onOpenFile;
-  final ValueChanged<ExportFileInfo> onShareFile;
+  final ExportFileInfo file;
+  final VoidCallback onOpen;
+  final VoidCallback onShare;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final dateLabel = file.modifiedAt == null
+        ? 'Sin fecha'
+        : DateFormat('dd/MM/yyyy HH:mm').format(file.modifiedAt!);
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.sand),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Ultimos archivos generados',
-            style: TextStyle(
+          Text(
+            file.fileName,
+            style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 14),
-          ...files.map(
-            (file) => Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundSoft,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    file.fileName,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${file.itemCount} registro(s)',
-                    style: const TextStyle(
-                      color: AppColors.moss,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    file.filePath,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () => onOpenFile(file.filePath),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.moss,
-                            foregroundColor: AppColors.surface,
-                          ),
-                          icon: const Icon(Icons.visibility_rounded, size: 18),
-                          label: const Text('Abrir'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => onShareFile(file),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.clayStrong,
-                            side: const BorderSide(color: AppColors.sand),
-                          ),
-                          icon: const Icon(Icons.share_rounded, size: 18),
-                          label: const Text('Compartir'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        onPressed: () => onCopyPath(file.filePath),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.clayStrong,
-                          side: const BorderSide(color: AppColors.sand),
-                        ),
-                        child: const Icon(Icons.copy_rounded, size: 18),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          const SizedBox(height: 6),
+          Text(
+            dateLabel,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onOpen,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.moss,
+                    foregroundColor: AppColors.surface,
+                  ),
+                  icon: const Icon(Icons.visibility_rounded, size: 18),
+                  label: const Text('Ver'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onShare,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.clayStrong,
+                    side: const BorderSide(color: AppColors.sand),
+                  ),
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Compartir'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: onDelete,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceMuted,
+                  foregroundColor: AppColors.danger,
+                ),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyHistoryState extends StatelessWidget {
+  const _EmptyHistoryState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 44,
+              color: AppColors.textSecondary,
+            ),
+            SizedBox(height: 14),
+            Text(
+              'Aún no has generado ningún reporte',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

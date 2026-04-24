@@ -16,7 +16,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isRecoveringPassword = false;
   bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
@@ -59,6 +67,35 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showSnackBar(
+        'Escribe tu correo para enviarte el enlace de recuperación.',
+        AppColors.clayStrong,
+      );
+      return;
+    }
+
+    setState(() => _isRecoveringPassword = true);
+    try {
+      final response = await AuthService.forgotPassword(email);
+      if (!mounted) {
+        return;
+      }
+
+      _showSnackBar(
+        response['message']?.toString() ??
+            'Revisa tu correo para continuar con el cambio de contraseña.',
+        response['success'] == true ? AppColors.success : AppColors.danger,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isRecoveringPassword = false);
       }
     }
   }
@@ -226,7 +263,38 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _isLoading || _isRecoveringPassword
+                                      ? null
+                                      : _forgotPassword,
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppColors.clayStrong,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                  ),
+                                  child: _isRecoveringPassword
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppColors.clayStrong,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Olvidé mi contraseña',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 22),
                               SizedBox(
                                 width: double.infinity,
                                 height: 56,

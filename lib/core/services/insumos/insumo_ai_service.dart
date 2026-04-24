@@ -52,7 +52,7 @@ class InsumoAiService {
     if (!_looksLikeSupplyRecord(normalizedCommand)) {
       return {
         'error':
-            'No detecte un registro de insumo valido. Describe compra, uso o aplicacion de fertilizantes, agroquimicos u otros insumos.',
+            'No detecté un registro de insumo válido. Describe compra, uso o aplicación de fertilizantes, agroquímicos u otros insumos.',
       };
     }
 
@@ -61,20 +61,22 @@ class InsumoAiService {
         : normalizedCommand;
 
     final rules = '''
-Eres un asistente experto en registro de insumos agricolas.
+Eres un asistente experto en registro de insumos agrícolas.
 Analiza SOLO registros de insumos del lote "$lotName" en la finca "$farmName".
 
 REGLAS ESTRICTAS:
 1. Responde EXCLUSIVAMENTE JSON puro.
-2. Si el texto no describe un registro de insumo valido, responde exactamente:
-{"error":"No se detecto un registro de insumo valido."}
+2. Si el texto no describe un registro de insumo válido, responde exactamente:
+{"error":"No se detectó un registro de insumo válido."}
 3. "insumo": nombre corto del producto o insumo.
 4. "ingredientes_activos": ingrediente activo, referencia o composicion. Si no hay, "".
 5. "fecha": formato YYYY-MM-DD. Si falta, usa "$today".
 6. "tipo": solo "organico" o "convencional".
 7. "origen": solo "propio" o "comprado".
-8. "factura": numero, referencia o nota. Si no hay, "".
-9. NO inventes informacion.
+8. "factura": número, referencia o nota.
+   - Si el origen es "propio", puede ir "".
+   - Si el origen es "comprado" y no se menciona factura, deja "" sin inventarla.
+9. NO inventes información.
 10. NO expliques nada fuera del JSON.
 
 Formato obligatorio:
@@ -100,7 +102,7 @@ Formato obligatorio:
 
     if (result.containsKey('error')) {
       return {
-        'error': (result['error'] ?? 'No se detecto un insumo valido.')
+        'error': (result['error'] ?? 'No se detectó un insumo válido.')
             .toString(),
       };
     }
@@ -112,7 +114,7 @@ Formato obligatorio:
           ) ??
           {
             'error':
-                'Ese mensaje no parece un registro de insumo valido para guardar.',
+                'Ese mensaje no parece un registro de insumo válido para guardar.',
           };
     }
 
@@ -123,7 +125,9 @@ Formato obligatorio:
       'fecha': (result['fecha'] ?? today).toString().trim(),
       'tipo': _normalizeTipo((result['tipo'] ?? '').toString()),
       'origen': _normalizeOrigen((result['origen'] ?? '').toString()),
-      'factura': (result['factura'] ?? '').toString().trim(),
+      'factura': _normalizeOrigen((result['origen'] ?? '').toString()) == 'propio'
+          ? ''
+          : (result['factura'] ?? '').toString().trim(),
     };
   }
 
@@ -150,7 +154,9 @@ Formato obligatorio:
       'fecha': _extractDate(normalizedCommand) ?? today,
       'tipo': _normalizeTipo(_detectTipo(normalizedCommand)),
       'origen': _normalizeOrigen(_detectOrigen(normalizedCommand)),
-      'factura': _extractFactura(normalizedCommand),
+      'factura': _normalizeOrigen(_detectOrigen(normalizedCommand)) == 'propio'
+          ? ''
+          : _extractFactura(normalizedCommand),
     };
   }
 
@@ -209,7 +215,7 @@ Formato obligatorio:
 
   String _extractFactura(String input) {
     final match = RegExp(
-      r'(?:factura|ref|referencia|numero)\s*[:#-]?\s*([A-Za-z0-9-]+)',
+      r'(?:factura|ref|referencia|número)\s*[:#-]?\s*([A-Za-z0-9-]+)',
       caseSensitive: false,
     ).firstMatch(input);
     return (match?.group(1) ?? '').trim();
@@ -237,7 +243,7 @@ Formato obligatorio:
 
   String _normalizeTipo(String value) {
     final normalized = value.toLowerCase().trim();
-    if (normalized == 'organico' || normalized == 'orgÃ¡nico') {
+    if (normalized == 'organico' || normalized == 'orgánico') {
       return 'organico';
     }
     return 'convencional';

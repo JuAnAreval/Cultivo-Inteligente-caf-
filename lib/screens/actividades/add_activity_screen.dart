@@ -21,6 +21,17 @@ class AddActivityScreen extends StatefulWidget {
 }
 
 class _AddActivityScreenState extends State<AddActivityScreen> {
+  static const List<String> _doseRequiredKeywords = [
+    'fertiliz',
+    'plaga',
+    'insect',
+    'fungic',
+    'encal',
+    'cal',
+    'rieg',
+    'nutric',
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final _fechaController = TextEditingController();
   final _actividadController = TextEditingController();
@@ -69,6 +80,25 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
     }
   }
 
+  Future<void> _pickFecha() async {
+    final now = DateTime.now();
+    final initialDate = _parseCurrentYearDate(_fechaController.text) ?? now;
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year, 1, 1),
+      lastDate: DateTime(now.year, 12, 31),
+      helpText: 'Selecciona la fecha de la actividad',
+    );
+
+    if (selectedDate == null) {
+      return;
+    }
+
+    _fechaController.text = _formatDate(selectedDate);
+  }
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) {
@@ -80,7 +110,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
     try {
       final payload = <String, dynamic>{
         'id_lote': widget.lotId,
-        'fecha': _fechaController.text.trim(),
+        'fecha': _formatDate(_parseCurrentYearDate(_fechaController.text.trim())!),
         'actividad': _actividadController.text.trim(),
         'aplicaciones': _aplicacionesController.text.trim(),
         'dosis': _dosisController.text.trim(),
@@ -137,9 +167,70 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
     return null;
   }
 
+  String? _validateFecha(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Selecciona una fecha';
+    }
+
+    if (_parseCurrentYearDate(value.trim()) == null) {
+      return 'Usa una fecha válida del año actual';
+    }
+
+    return null;
+  }
+
+  String? _validateDosis(String? value) {
+    if (_doseIsRequiredForActivity(_actividadController.text.trim()) &&
+        (value == null || value.trim().isEmpty)) {
+      return 'Esta actividad requiere dosis';
+    }
+    return null;
+  }
+
+  bool _doseIsRequiredForActivity(String activity) {
+    final normalized = activity.toLowerCase();
+    return _doseRequiredKeywords.any(normalized.contains);
+  }
+
+  DateTime? _parseCurrentYearDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) {
+      return null;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return null;
+    }
+
+    if (year != DateTime.now().year) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.existingActivity != null;
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -150,7 +241,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.fromLTRB(18, 18, 18, bottomSafeArea + 36),
         child: Form(
           key: _formKey,
           child: Column(
@@ -170,7 +261,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Este registro quedara asociado al lote ${widget.lotName} de la finca ${widget.farmName}.',
+                      'Este registro quedará asociado al lote ${widget.lotName} de la finca ${widget.farmName}.',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         height: 1.5,
@@ -186,9 +277,11 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                     _Field(
                       controller: _fechaController,
                       label: 'Fecha',
-                      hint: 'YYYY-MM-DD',
+                      hint: 'Selecciona una fecha',
                       icon: Icons.event_rounded,
-                      validator: _required,
+                      readOnly: true,
+                      onTap: _pickFecha,
+                      validator: _validateFecha,
                     ),
                     const SizedBox(height: 16),
                     _Field(
@@ -206,13 +299,15 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                       hint: 'Productos o aplicaciones realizadas',
                       icon: Icons.science_rounded,
                       maxLines: 2,
+                      validator: _required,
                     ),
                     const SizedBox(height: 16),
                     _Field(
                       controller: _dosisController,
                       label: 'Dosis',
-                      hint: 'Cantidades o dosis aplicadas',
+                      hint: 'Cantidades o dosis aplicadas, si corresponde',
                       icon: Icons.straighten_rounded,
+                      validator: _validateDosis,
                     ),
                     const SizedBox(height: 16),
                     _Field(
@@ -325,6 +420,8 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.maxLines = 1,
     this.validator,
+    this.readOnly = false,
+    this.onTap,
   });
 
   final TextEditingController controller;
@@ -333,6 +430,8 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final int maxLines;
   final String? Function(String?)? validator;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -351,6 +450,8 @@ class _Field extends StatelessWidget {
           controller: controller,
           maxLines: maxLines,
           validator: validator,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textSecondary),

@@ -5,6 +5,7 @@ import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
 import 'package:app_flutter_ai/core/services/insumos/insumo_ai_service.dart';
 import 'package:app_flutter_ai/core/services/insumos/insumo_servies.dart';
+import 'package:app_flutter_ai/core/widgets/cultiva_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -32,8 +33,7 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
 
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _insumoController = TextEditingController();
-  final TextEditingController _ingredientesController =
-      TextEditingController();
+  final TextEditingController _ingredientesController = TextEditingController();
   final TextEditingController _fechaController = TextEditingController();
   final TextEditingController _facturaController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -44,6 +44,11 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
   late final InsumoAiService _insumoAiService = InsumoAiService(_llmService);
 
   final List<_ChatMessage> _messages = [];
+  final List<String> _quickSuggestions = const [
+    'Apliqué abono orgánico bocashi hoy en la tarde, ingredientes gallinaza y melaza, fue propio.',
+    'Compré fungicida score para el lote, ingrediente activo difenoconazol, factura 12345.',
+    'Registra un insecticida comprado hoy, ingrediente activo imidacloprid y factura 4589.',
+  ];
 
   String _tipo = 'organico';
   String _origen = 'propio';
@@ -180,13 +185,13 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
     );
 
     if (!await tempFile.exists()) {
-      throw Exception('La descarga no genero un archivo temporal valido.');
+      throw Exception('La descarga no generó un archivo temporal válido.');
     }
 
     final size = await tempFile.length();
     if (size < 1024 * 1024) {
       await tempFile.delete();
-      throw Exception('La descarga no es valida.');
+      throw Exception('La descarga no es válida.');
     }
 
     if (await targetFile.exists()) {
@@ -228,7 +233,7 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
 
     if (!available) {
       _showSnackBar(
-        'No fue posible activar el microfono en este momento.',
+        'No fue posible activar el micrófono en este momento.',
         AppColors.danger,
       );
       return;
@@ -276,14 +281,14 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
         lotName: widget.lotName,
         farmName: widget.farmName,
       );
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
         _messages.add(
           _ChatMessage.system(
-            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripcion mas corta.',
+            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripción más corta.',
           ),
         );
         _isProcessing = false;
@@ -300,7 +305,7 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
       setState(() {
         _messages.add(
           _ChatMessage.system(
-            'La IA no pudo estructurar el insumo. Intenta con mas detalle.',
+            'La IA no pudo estructurar el insumo. Intenta con más detalle.',
           ),
         );
         _isProcessing = false;
@@ -322,19 +327,20 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
       return;
     }
 
-    _insumoController.text = (safeDraft['insumo'] ?? '').toString();
+    _insumoController.text = (safeDraft['insumo'] ?? '').toString().trim();
     _ingredientesController.text =
-        (safeDraft['ingredientes_activos'] ?? '').toString();
-    _fechaController.text = (safeDraft['fecha'] ?? '').toString();
+        (safeDraft['ingredientes_activos'] ?? '').toString().trim();
+    _fechaController.text =
+        _normalizeDateText((safeDraft['fecha'] ?? '').toString());
     _tipo = (safeDraft['tipo'] ?? 'organico').toString();
     _origen = (safeDraft['origen'] ?? 'propio').toString();
-    _facturaController.text = (safeDraft['factura'] ?? '').toString();
+    _facturaController.text = (safeDraft['factura'] ?? '').toString().trim();
 
     setState(() {
       _hasDraft = true;
       _messages.add(
         _ChatMessage.system(
-          'Listo. Revise el borrador del insumo y guardelo si esta correcto.',
+          'Listo. Revisa el borrador del insumo y guárdalo si está correcto.',
         ),
       );
       _isProcessing = false;
@@ -343,14 +349,34 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
   }
 
   Future<void> _saveDraft() async {
+    final formattedDate = _normalizeDateText(_fechaController.text.trim());
+
     if (_insumoController.text.trim().isEmpty ||
-        _fechaController.text.trim().isEmpty) {
+        _ingredientesController.text.trim().isEmpty) {
       _showSnackBar(
-        'Completa al menos la fecha y el nombre del insumo.',
+        'Completa insumo e ingredientes activos.',
         AppColors.danger,
       );
       return;
     }
+
+    if (_origen == 'comprado' && _facturaController.text.trim().isEmpty) {
+      _showSnackBar(
+        'La factura es obligatoria si el insumo es comprado.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    if (!_isCurrentYearDate(formattedDate)) {
+      _showSnackBar(
+        'La fecha debe tener formato YYYY-MM-DD y ser del año actual.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    _fechaController.text = formattedDate;
 
     FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
@@ -360,7 +386,7 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
         'id_lote': widget.lotId,
         'insumo': _insumoController.text.trim(),
         'ingredientes_activos': _ingredientesController.text.trim(),
-        'fecha': _fechaController.text.trim(),
+        'fecha': formattedDate,
         'tipo': _tipo,
         'origen': _origen,
         'factura': _facturaController.text.trim(),
@@ -384,6 +410,58 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
     }
   }
 
+  void _applySuggestion(String suggestion) {
+    _messageController.text = suggestion;
+    _messageController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _messageController.text.length),
+    );
+  }
+
+  String _normalizeDateText(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    final isoMatch = RegExp(r'\b\d{4}-\d{2}-\d{2}\b').firstMatch(trimmed);
+    if (isoMatch != null) {
+      return isoMatch.group(0) ?? '';
+    }
+
+    final slashMatch =
+        RegExp(r'\b(\d{4})/(\d{2})/(\d{2})\b').firstMatch(trimmed);
+    if (slashMatch != null) {
+      return '${slashMatch.group(1)}-${slashMatch.group(2)}-${slashMatch.group(3)}';
+    }
+
+    return trimmed;
+  }
+
+  bool _isCurrentYearDate(String value) {
+    final normalized = _normalizeDateText(value);
+    final parts = normalized.split('-');
+    if (parts.length != 3) {
+      return false;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return false;
+    }
+
+    if (year != DateTime.now().year) {
+      return false;
+    }
+
+    final parsed = DateTime.tryParse(normalized);
+    return parsed != null &&
+        parsed.year == year &&
+        parsed.month == month &&
+        parsed.day == day;
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -405,111 +483,197 @@ class _InsumoAiChatScreenState extends State<InsumoAiChatScreen> {
       ),
     );
   }
- 
+
+  Future<bool> _confirmExitIfNeeded() async {
+    if (!_hasDraft) {
+      return true;
+    }
+
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('¿Estás seguro de salir?'),
+          content: const Text(
+            'Si sales ahora, se borrará el borrador generado por la IA y tendrás que volver a llenar la información.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Seguir aquí'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.clayStrong,
+                foregroundColor: AppColors.surface,
+              ),
+              child: const Text('Salir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return shouldLeave ?? false;
+  }
+
+  Future<void> _handleExit() async {
+    final shouldLeave = await _confirmExitIfNeeded();
+    if (!mounted || !shouldLeave) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isBlocked = _isDownloading || _isPreparing || _errorText != null;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Chat IA - ${widget.lotName}'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              children: [
-                _CompactHeaderCard(
-                  farmName: widget.farmName,
-                  lotName: widget.lotName,
-                ),
-                const SizedBox(height: 12),
-                const _RequiredDataCard(
-                  title: 'Datos que necesito',
-                  items: [
-                    'Nombre del insumo',
-                    'Ingredientes activos',
-                    'Fecha',
-                    'Tipo, por ejemplo organico o convencional',
-                    'Origen, propio o comprado',
-                    'Factura, si la tienes',
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (isBlocked)
-                  _ModelStatusCard(
-                    isDownloading: _isDownloading,
-                    isError: _errorText != null,
-                    progress: _downloadProgress,
-                    status: _errorText ?? _statusText,
-                    onRetry: _errorText == null ? null : _initializeLlm,
-                  )
-                else ...[
-                  if (_messages.isEmpty) const _IntroCard(),
-                  ..._messages.map((message) => _ChatBubble(message: message)),
-                  if (_hasDraft) ...[
-                    const SizedBox(height: 12),
-                    _AiDraftWrapper(
-                      child: _DraftCard(
-                        insumoController: _insumoController,
-                        ingredientesController: _ingredientesController,
-                        fechaController: _fechaController,
-                        facturaController: _facturaController,
-                        tipo: _tipo,
-                        origen: _origen,
-                        onTipoChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() => _tipo = value);
-                        },
-                        onOrigenChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() => _origen = value);
-                        },
-                        onSave: _isSaving ? null : _saveDraft,
-                        isSaving: _isSaving,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        await _handleExit();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        backgroundColor: AppColors.background,
+        appBar: buildCultivaSecondaryAppBar(
+          context: context,
+          title: 'Chat IA',
+          leading: IconButton(
+            onPressed: _handleExit,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: [
+                  _CompactHeaderCard(
+                    farmName: widget.farmName,
+                    lotName: widget.lotName,
+                  ),
+                  const SizedBox(height: 12),
+                  const _RequiredDataCard(
+                    title: 'Datos que necesito',
+                    items: [
+                      'Nombre del insumo',
+                      'Ingredientes activos',
+                      'Fecha',
+                      'Tipo, por ejemplo orgánico o convencional',
+                      'Origen, propio o comprado',
+                      'Factura, si es comprado',
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (isBlocked)
+                    _ModelStatusCard(
+                      isDownloading: _isDownloading,
+                      isError: _errorText != null,
+                      progress: _downloadProgress,
+                      status: _errorText ?? _statusText,
+                      onRetry: _errorText == null ? null : _initializeLlm,
+                    )
+                  else ...[
+                    if (_messages.isEmpty)
+                      _SuggestionCard(
+                        suggestions: _quickSuggestions,
+                        onSelected: _applySuggestion,
                       ),
+                    ..._messages
+                        .map((message) => _ChatBubble(message: message)),
+                    if (_hasDraft) ...[
+                      const SizedBox(height: 12),
+                      _AiDraftWrapper(
+                        child: _DraftCard(
+                          insumoController: _insumoController,
+                          ingredientesController: _ingredientesController,
+                          fechaController: _fechaController,
+                          facturaController: _facturaController,
+                          tipo: _tipo,
+                          origen: _origen,
+                          onTipoChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() => _tipo = value);
+                          },
+                          onOrigenChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() => _origen = value);
+                          },
+                          onSave: _isSaving ? null : _saveDraft,
+                          isSaving: _isSaving,
+                        ),
+                      ),
+                    ],
+                  ],
+                  SizedBox(
+                    height: viewInsets > 0 ? 12 : 88 + bottomSafeArea,
+                  ),
+                ],
+              ),
+            ),
+            if (!isBlocked)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  0,
+                  12,
+                  viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_messages.isNotEmpty) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _quickSuggestions
+                                .map(
+                                  (suggestion) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _SuggestionChip(
+                                      label: suggestion,
+                                      onTap: () => _applySuggestion(suggestion),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    _ComposerCard(
+                      controller: _messageController,
+                      isListening: _isListening,
+                      isProcessing: _isProcessing,
+                      onListen: _listen,
+                      onSend: _sendMessage,
                     ),
                   ],
-                ],
-                SizedBox(
-                  height: viewInsets > 0 ? 12 : 88 + bottomSafeArea,
                 ),
-              ],
-            ),
-          ),
-          if (!isBlocked)
-            AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.fromLTRB(
-                12,
-                0,
-                12,
-                viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
               ),
-              child: _ComposerCard(
-                controller: _messageController,
-                isListening: _isListening,
-                isProcessing: _isProcessing,
-                onListen: _listen,
-                onSend: _sendMessage,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -646,9 +810,8 @@ class _ComposerCard extends StatelessWidget {
                 ),
                 icon: Icon(
                   isListening ? Icons.mic : Icons.mic_none,
-                  color: isListening
-                      ? AppColors.danger
-                      : AppColors.textSecondary,
+                  color:
+                      isListening ? AppColors.danger : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(width: 6),
@@ -675,6 +838,7 @@ class _ComposerCard extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _IntroCard extends StatelessWidget {
   const _IntroCard();
 
@@ -692,7 +856,7 @@ class _IntroCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Ejemplos rapidos',
+            'Ejemplos rápidos',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
@@ -701,15 +865,108 @@ class _IntroCard extends StatelessWidget {
           ),
           SizedBox(height: 10),
           Text(
-            'Aplique abono organico bocashi hoy en la tarde, ingredientes gallinaza y melaza, fue propio.',
+            'Apliqué abono orgánico bocashi hoy en la tarde, ingredientes gallinaza y melaza, fue propio.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
           SizedBox(height: 8),
           Text(
-            'Compre fungicida score para el lote, ingrediente activo difenoconazol, factura 12345.',
+            'Compré fungicida score para el lote, ingrediente activo difenoconazol, factura 12345.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SuggestionCard extends StatelessWidget {
+  const _SuggestionCard({
+    required this.suggestions,
+    required this.onSelected,
+  });
+
+  final List<String> suggestions;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Sugerencias rápidas',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: suggestions
+                  .map(
+                    (suggestion) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _SuggestionChip(
+                        label: suggestion,
+                        onTap: () => onSelected(suggestion),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSoft,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.sand),
+          ),
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -918,7 +1175,7 @@ class _DraftCard extends StatelessWidget {
           _DraftField(
             label: 'Ingredientes activos',
             controller: ingredientesController,
-            hint: 'Composicion o referencia',
+            hint: 'Composición o referencia',
             maxLines: 2,
           ),
           const SizedBox(height: 12),
@@ -932,7 +1189,7 @@ class _DraftCard extends StatelessWidget {
             label: 'Tipo',
             value: tipo,
             items: const [
-              DropdownMenuItem(value: 'organico', child: Text('Organico')),
+              DropdownMenuItem(value: 'organico', child: Text('Orgánico')),
               DropdownMenuItem(
                 value: 'convencional',
                 child: Text('Convencional'),
@@ -954,7 +1211,7 @@ class _DraftCard extends StatelessWidget {
           _DraftField(
             label: 'Factura',
             controller: facturaController,
-            hint: 'Numero o referencia',
+            hint: 'Número o referencia',
           ),
           const SizedBox(height: 16),
           SizedBox(

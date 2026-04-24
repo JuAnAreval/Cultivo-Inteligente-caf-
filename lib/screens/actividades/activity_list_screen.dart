@@ -1,5 +1,6 @@
 import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/actividades/actividad_campo_service.dart';
+import 'package:app_flutter_ai/core/widgets/cultiva_ui.dart';
 import 'package:app_flutter_ai/screens/actividades/add_activity_screen.dart';
 import 'package:app_flutter_ai/screens/actividades/activity_ai_chat_screen.dart';
 import 'package:flutter/material.dart';
@@ -51,9 +52,7 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _activitiesFuture = _loadActivities();
-    });
+    setState(() => _activitiesFuture = _loadActivities());
     await _activitiesFuture;
   }
 
@@ -182,11 +181,9 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Actividades - ${widget.lotName}'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
+      appBar: buildCultivaSecondaryAppBar(
+        context: context,
+        title: 'Actividades',
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _activitiesFuture,
@@ -201,53 +198,79 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      color: AppColors.danger,
-                      size: 42,
+                child: CultivaEmptyStateCard(
+                  icon: Icons.error_outline_rounded,
+                  title: 'No pudimos cargar las actividades',
+                  message: '${snapshot.error}',
+                  action: FilledButton(
+                    onPressed: _refresh,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.moss,
+                      foregroundColor: AppColors.surface,
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'No se pudieron cargar las actividades.\n${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    FilledButton(
-                      onPressed: _refresh,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.moss,
-                        foregroundColor: AppColors.surface,
-                      ),
-                      child: const Text('Reintentar'),
-                    ),
-                  ],
+                    child: const Text('Reintentar'),
+                  ),
                 ),
               ),
             );
           }
 
           final activities = snapshot.data ?? [];
+
           return RefreshIndicator(
             onRefresh: _refresh,
             color: AppColors.moss,
             child: ListView(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 108),
               children: [
-                _ActivityHeaderCard(
-                  lotName: widget.lotName,
-                  farmName: widget.farmName,
-                  onOpenAi: _openAiChat,
+                CultivaHeroCard(
+                  eyebrow: '${widget.farmName} · ${widget.lotName}',
+                  title: 'Actividades del lote',
+                  description:
+                      'Consulta el historial del lote y registra nuevas labores con IA cuando necesites ir más rápido.',
+                  trailing: FilledButton.icon(
+                    onPressed: _openAiChat,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.moss,
+                      foregroundColor: AppColors.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                    label: const Text('Chat IA'),
+                  ),
+                  footer: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      CultivaTintedChip(
+                        icon: Icons.event_note_rounded,
+                        label:
+                            '${activities.length} ${activities.length == 1 ? 'actividad' : 'actividades'}',
+                        backgroundColor: AppColors.surface,
+                        foregroundColor: AppColors.moss,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 if (activities.isEmpty)
-                  const _EmptyActivityCard()
+                  CultivaEmptyStateCard(
+                    icon: Icons.event_note_rounded,
+                    title: 'Aún no hay actividades',
+                    message:
+                        'Registra la primera actividad del lote para empezar a construir su historial de trabajo.',
+                    action: FilledButton.icon(
+                      onPressed: _openAiChat,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.moss,
+                        foregroundColor: AppColors.surface,
+                      ),
+                      icon: const Icon(Icons.auto_awesome_rounded),
+                      label: const Text('Registrar con IA'),
+                    ),
+                  )
                 else
                   ...activities.map(
                     (activity) => _ActivityCard(
@@ -256,119 +279,15 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
                       onDelete: () => _deleteActivity(activity),
                     ),
                   ),
-                const SizedBox(height: 90),
               ],
             ),
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: CultivaPillFab(
+        icon: Icons.auto_awesome_rounded,
+        label: 'Registrar con IA',
         onPressed: _openAiChat,
-        backgroundColor: AppColors.moss,
-        foregroundColor: AppColors.surface,
-        icon: const Icon(Icons.auto_awesome_rounded),
-        label: const Text('Registrar con IA'),
-      ),
-    );
-  }
-}
-
-class _ActivityHeaderCard extends StatelessWidget {
-  const _ActivityHeaderCard({
-    required this.lotName,
-    required this.farmName,
-    required this.onOpenAi,
-  });
-
-  final String lotName;
-  final String farmName;
-  final VoidCallback onOpenAi;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSoft,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            farmName,
-            style: const TextStyle(
-              color: AppColors.clayStrong,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Historial del lote $lotName',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Aqui veras el historial del lote y podras registrar nuevas actividades con ayuda de IA.',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.history_rounded,
-                        size: 18,
-                        color: AppColors.moss,
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Historial local y sincronizado',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              FilledButton.icon(
-                onPressed: onOpenAi,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.moss,
-                  foregroundColor: AppColors.surface,
-                ),
-                icon: const Icon(Icons.auto_awesome_rounded),
-                label: const Text('Chat IA'),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -385,86 +304,156 @@ class _ActivityCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  String _shortText(String value, int maxLength) {
+    final cleaned = value.trim();
+    if (cleaned.length <= maxLength) {
+      return cleaned;
+    }
+    return '${cleaned.substring(0, maxLength - 3)}...';
+  }
+
+  CultivaStatusBadge? _buildBadge(String syncStatus) {
+    if (syncStatus.isEmpty) {
+      return null;
+    }
+
+    if (syncStatus == 'synced') {
+      return const CultivaStatusBadge(
+        label: 'Sincronizada',
+        color: AppColors.success,
+        backgroundColor: Color(0xFFEAF1E1),
+      );
+    }
+
+    return const CultivaStatusBadge(
+      label: 'Pendiente',
+      color: AppColors.clayStrong,
+      backgroundColor: AppColors.surfaceMuted,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final fecha = (activity['fecha'] ?? '').toString();
+    final fecha = formatSpanishDate((activity['fecha'] ?? '').toString());
     final actividad = (activity['actividad'] ?? '').toString();
     final aplicaciones = (activity['aplicaciones'] ?? '').toString();
     final dosis = (activity['dosis'] ?? '').toString();
     final observaciones =
         (activity['observaciones_responsable'] ?? '').toString();
     final syncStatus = (activity['syncStatus'] ?? '').toString();
+    final aplicacionesResumen = _shortText(
+      aplicaciones.isEmpty ? 'Sin dato' : aplicaciones,
+      14,
+    );
+    final detalleResumen = _shortText(
+      observaciones.isEmpty ? 'Sin dato' : observaciones,
+      14,
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.sand),
-      ),
+    return CultivaEntityCard(
+      accentColor: AppColors.moss,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  actividad.isEmpty ? 'Actividad sin descripcion' : actividad,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      actividad.isEmpty
+                          ? 'Actividad sin descripción'
+                          : actividad,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      fecha.isEmpty ? 'Fecha pendiente' : fecha,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              if (syncStatus.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: syncStatus == 'synced'
-                        ? AppColors.backgroundSoft
-                        : AppColors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    syncStatus == 'synced' ? 'Sincronizada' : 'Pendiente',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.soil,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_buildBadge(syncStatus) != null) _buildBadge(syncStatus)!,
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    color: AppColors.surface,
+                    surfaceTintColor: Colors.transparent,
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        onEdit();
+                      } else if (value == 'delete') {
+                        onDelete();
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Text('Editar'),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('Eliminar'),
+                      ),
+                    ],
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: AppColors.backgroundSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_horiz_rounded,
+                        color: AppColors.clayStrong,
+                      ),
                     ),
                   ),
-                ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (fecha.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundSoft,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                fecha,
-                style: const TextStyle(
-                  color: AppColors.moss,
-                  fontWeight: FontWeight.w700,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: CultivaMiniStat(
+                  value: aplicacionesResumen,
+                  label: 'aplicación',
                 ),
               ),
-            ),
-          if (aplicaciones.isNotEmpty || dosis.isNotEmpty || observaciones.isNotEmpty)
-            const SizedBox(height: 12),
-          if (aplicaciones.isNotEmpty)
-            _DetailLine(label: 'Aplicaciones', value: aplicaciones),
-          if (dosis.isNotEmpty) _DetailLine(label: 'Dosis', value: dosis),
-          if (observaciones.isNotEmpty)
-            _DetailLine(label: 'Observaciones', value: observaciones),
-          const SizedBox(height: 14),
+              Expanded(
+                child: CultivaMiniStat(
+                  value: dosis.isEmpty ? 'Sin dato' : dosis,
+                  label: 'dosis',
+                  alignment: CrossAxisAlignment.center,
+                ),
+              ),
+              Expanded(
+                child: CultivaMiniStat(
+                  value: detalleResumen,
+                  label: 'detalle',
+                  alignment: CrossAxisAlignment.end,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.sand),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -473,8 +462,12 @@ class _ActivityCard extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.clayStrong,
                     side: const BorderSide(color: AppColors.sand),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
-                  icon: const Icon(Icons.edit_rounded),
+                  icon: const Icon(Icons.edit_rounded, size: 18),
                   label: const Text('Editar'),
                 ),
               ),
@@ -484,88 +477,17 @@ class _ActivityCard extends StatelessWidget {
                   onPressed: onDelete,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.danger,
-                    side: const BorderSide(color: AppColors.sand),
+                    side: const BorderSide(color: AppColors.danger),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
-                  icon: const Icon(Icons.delete_outline_rounded),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Eliminar'),
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailLine extends StatelessWidget {
-  const _DetailLine({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(color: AppColors.textSecondary, height: 1.45),
-          children: [
-            TextSpan(
-              text: '$label: ',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            TextSpan(text: value),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyActivityCard extends StatelessWidget {
-  const _EmptyActivityCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.event_note_rounded,
-            color: AppColors.moss,
-            size: 40,
-          ),
-          SizedBox(height: 14),
-          Text(
-            'Aún no hay actividades',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Usa el chat de IA para registrar rapidamente la primera actividad del lote.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              height: 1.45,
-            ),
           ),
         ],
       ),

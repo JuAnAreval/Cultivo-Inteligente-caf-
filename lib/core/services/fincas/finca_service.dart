@@ -84,7 +84,7 @@ class FincaService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca invalido.');
+      throw Exception('Id de finca inválido.');
     }
 
     final existing = await DatabaseHelper().getFincaByLocalId(localId);
@@ -121,7 +121,7 @@ class FincaService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca invalido.');
+      throw Exception('Id de finca inválido.');
     }
 
     final existing = await DatabaseHelper().getFincaByLocalId(localId);

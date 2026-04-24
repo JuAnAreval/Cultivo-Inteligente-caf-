@@ -23,7 +23,6 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
   final _fechaController = TextEditingController();
   final _kilosCerezaController = TextEditingController();
   final _kilosPergaminoController = TextEditingController();
-  final _anioController = TextEditingController();
 
   late String _proceso;
   bool _isSaving = false;
@@ -36,17 +35,48 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
     _kilosCerezaController.text = (existing?['kilos_cereza'] ?? '').toString();
     _kilosPergaminoController.text =
         (existing?['kilos_pergamino'] ?? '').toString();
-    _anioController.text = (existing?['anio'] ?? DateTime.now().year).toString();
     _proceso = (existing?['proceso'] ?? '').toString();
+
+    _fechaController.addListener(_refresh);
+    _kilosCerezaController.addListener(_refresh);
+    _kilosPergaminoController.addListener(_refresh);
   }
 
   @override
   void dispose() {
+    _fechaController.removeListener(_refresh);
+    _kilosCerezaController.removeListener(_refresh);
+    _kilosPergaminoController.removeListener(_refresh);
     _fechaController.dispose();
     _kilosCerezaController.dispose();
     _kilosPergaminoController.dispose();
-    _anioController.dispose();
     super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickFecha() async {
+    final now = DateTime.now();
+    final currentYear = now.year;
+    final initialDate = _parseCurrentYearDate(_fechaController.text) ?? now;
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(currentYear, 1, 1),
+      lastDate: DateTime(currentYear, 12, 31),
+      helpText: 'Selecciona la fecha de la cosecha',
+    );
+
+    if (selectedDate == null) {
+      return;
+    }
+
+    _fechaController.text = _formatDate(selectedDate);
   }
 
   Future<void> _save() async {
@@ -58,13 +88,14 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final fecha = _parseCurrentYearDate(_fechaController.text.trim())!;
       final payload = <String, dynamic>{
         'id_finca': widget.farmId,
-        'fecha': _fechaController.text.trim(),
-        'kilos_cereza': _kilosCerezaController.text.trim(),
-        'kilos_pergamino': _kilosPergaminoController.text.trim(),
+        'fecha': _formatDate(fecha),
+        'kilos_cereza': _parseNumber(_kilosCerezaController.text.trim()),
+        'kilos_pergamino': _parseNumber(_kilosPergaminoController.text.trim()),
         'proceso': _proceso.trim(),
-        'anio': _anioController.text.trim(),
+        'anio': fecha.year,
       };
 
       final existingId = (widget.existingCosecha?['id'] ?? '').toString();
@@ -110,25 +141,86 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
     }
   }
 
-  String? _required(String? value) {
+  String? _validateFecha(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Este campo es obligatorio';
+      return 'Selecciona una fecha';
     }
+
+    if (_parseCurrentYearDate(value.trim()) == null) {
+      return 'Usa una fecha válida del año actual';
+    }
+
     return null;
   }
 
   String? _validatePeso(String? value) {
-    final cereza = _kilosCerezaController.text.trim();
-    final pergamino = _kilosPergaminoController.text.trim();
-    if (cereza.isEmpty && pergamino.isEmpty) {
-      return 'Ingresa kilos de cereza o pergamino';
+    if (value == null || value.trim().isEmpty) {
+      return 'Este campo es obligatorio';
+    }
+
+    final parsed = _parseNumber(value.trim());
+    if (parsed == null) {
+      return 'Ingresa un número válido';
+    }
+
+    if (parsed < 0) {
+      return 'El valor no puede ser negativo';
+    }
+
+    return null;
+  }
+
+  String? _validateProceso(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Selecciona un proceso';
     }
     return null;
+  }
+
+  DateTime? _parseCurrentYearDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) {
+      return null;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return null;
+    }
+
+    if (year != DateTime.now().year) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  double? _parseNumber(String value) {
+    return double.tryParse(value.replaceAll(',', '.'));
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.existingCosecha != null;
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    final parsedDate = _parseCurrentYearDate(_fechaController.text.trim());
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -139,7 +231,7 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.fromLTRB(18, 18, 18, bottomSafeArea + 36),
         child: Form(
           key: _formKey,
           child: Column(
@@ -175,9 +267,11 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
                     _Field(
                       controller: _fechaController,
                       label: 'Fecha',
-                      hint: 'YYYY-MM-DD',
+                      hint: 'Selecciona una fecha',
                       icon: Icons.event_rounded,
-                      validator: _required,
+                      readOnly: true,
+                      onTap: _pickFecha,
+                      validator: _validateFecha,
                     ),
                     const SizedBox(height: 16),
                     Row(
@@ -210,41 +304,25 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DropdownCard(
-                            label: 'Proceso',
-                            value: _proceso,
-                            items: const [
-                              DropdownMenuItem(value: '', child: Text('Sin definir')),
-                              DropdownMenuItem(value: 'MIEL', child: Text('MIEL')),
-                              DropdownMenuItem(
-                                value: 'NATURAL',
-                                child: Text('NATURAL'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'LAVADO',
-                                child: Text('LAVADO'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() => _proceso = value ?? '');
-                            },
-                          ),
+                    _DropdownCard(
+                      label: 'Proceso',
+                      value: _proceso,
+                      validator: _validateProceso,
+                      items: const [
+                        DropdownMenuItem(value: '', child: Text('Selecciona')),
+                        DropdownMenuItem(value: 'MIEL', child: Text('MIEL')),
+                        DropdownMenuItem(
+                          value: 'NATURAL',
+                          child: Text('NATURAL'),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _Field(
-                            controller: _anioController,
-                            label: 'Año',
-                            hint: 'Ej: 2026',
-                            icon: Icons.calendar_month_rounded,
-                            keyboardType: TextInputType.number,
-                            validator: _required,
-                          ),
+                        DropdownMenuItem(
+                          value: 'LAVADO',
+                          child: Text('LAVADO'),
                         ),
                       ],
+                      onChanged: (value) {
+                        setState(() => _proceso = value ?? '');
+                      },
                     ),
                   ],
                 ),
@@ -274,7 +352,10 @@ class _AddCosechaScreenState extends State<AddCosechaScreen> {
                       value: _kilosPergaminoController.text,
                     ),
                     _PreviewRow(label: 'Proceso', value: _proceso),
-                    _PreviewRow(label: 'Año', value: _anioController.text),
+                    _PreviewRow(
+                      label: 'Año',
+                      value: parsedDate == null ? '' : parsedDate.year.toString(),
+                    ),
                   ],
                 ),
               ),
@@ -344,6 +425,8 @@ class _Field extends StatelessWidget {
     required this.icon,
     this.keyboardType,
     this.validator,
+    this.readOnly = false,
+    this.onTap,
   });
 
   final TextEditingController controller;
@@ -352,6 +435,8 @@ class _Field extends StatelessWidget {
   final IconData icon;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -370,6 +455,8 @@ class _Field extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           validator: validator,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textSecondary),
@@ -393,12 +480,14 @@ class _DropdownCard extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
+    this.validator,
   });
 
   final String label;
   final String value;
   final List<DropdownMenuItem<String>> items;
   final ValueChanged<String?> onChanged;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -417,6 +506,7 @@ class _DropdownCard extends StatelessWidget {
           initialValue: value,
           items: items,
           onChanged: onChanged,
+          validator: validator,
           decoration: InputDecoration(
             filled: true,
             fillColor: AppColors.surfaceMuted,

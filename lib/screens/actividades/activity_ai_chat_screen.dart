@@ -5,6 +5,7 @@ import 'package:app_flutter_ai/core/config/app_colors.dart';
 import 'package:app_flutter_ai/core/services/actividades/activity_ai_service.dart';
 import 'package:app_flutter_ai/core/services/actividades/actividad_campo_service.dart';
 import 'package:app_flutter_ai/core/services/ai/llm_service.dart';
+import 'package:app_flutter_ai/core/widgets/cultiva_ui.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -27,6 +28,17 @@ class ActivityAiChatScreen extends StatefulWidget {
 }
 
 class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
+  static const List<String> _doseRequiredKeywords = [
+    'fertiliz',
+    'plaga',
+    'insect',
+    'fungic',
+    'encal',
+    'cal',
+    'rieg',
+    'nutric',
+  ];
+
   static const String _modelFileName = AiModelConfig.modelFileName;
   static const String _modelUrl = AiModelConfig.modelUrl;
 
@@ -47,6 +59,11 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
   );
 
   final List<_ChatMessage> _messages = [];
+  final List<String> _quickSuggestions = const [
+    'Hoy hice plateo manual en la mañana y apliqué 2 litros de caldo mineral, responsable Juan.',
+    'Registra poda sanitaria hoy, sin aplicaciones, observación: faltan herramientas.',
+    'Ayer hicimos fertilización con 3 kilos por lote y responsable Carlos.',
+  ];
 
   bool _isListening = false;
   bool _isProcessing = false;
@@ -139,8 +156,9 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       _isPreparing = false;
       _isDownloading = false;
       _errorText = success ? null : 'No se pudo abrir el modelo local.';
-      _statusText =
-          success ? 'IA lista para registrar actividades.' : 'IA no disponible.';
+      _statusText = success
+          ? 'IA lista para registrar actividades.'
+          : 'IA no disponible.';
     });
 
     return success;
@@ -182,13 +200,13 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
     );
 
     if (!await tempFile.exists()) {
-      throw Exception('La descarga no genero un archivo temporal valido.');
+      throw Exception('La descarga no generó un archivo temporal válido.');
     }
 
     final size = await tempFile.length();
     if (size < 1024 * 1024) {
       await tempFile.delete();
-      throw Exception('La descarga no es valida.');
+      throw Exception('La descarga no es válida.');
     }
 
     if (await targetFile.exists()) {
@@ -230,7 +248,7 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
 
     if (!available) {
       _showSnackBar(
-        'No fue posible activar el microfono en este momento.',
+        'No fue posible activar el micrófono en este momento.',
         AppColors.danger,
       );
       return;
@@ -278,14 +296,14 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
         lotName: widget.lotName,
         farmName: widget.farmName,
       );
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
         _messages.add(
           _ChatMessage.system(
-            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripcion mas corta.',
+            'La IA no pudo procesar este mensaje. Intenta de nuevo con una descripción más corta.',
           ),
         );
         _isProcessing = false;
@@ -302,7 +320,7 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       setState(() {
         _messages.add(
           _ChatMessage.system(
-            'La IA no pudo estructurar la actividad. Intenta con mas detalle.',
+            'La IA no pudo estructurar la actividad. Intenta con más detalle.',
           ),
         );
         _isProcessing = false;
@@ -324,18 +342,21 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       return;
     }
 
-    _fechaController.text = (safeDraft['fecha'] ?? '').toString();
-    _actividadController.text = (safeDraft['actividad'] ?? '').toString();
-    _aplicacionesController.text = (safeDraft['aplicaciones'] ?? '').toString();
-    _dosisController.text = (safeDraft['dosis'] ?? '').toString();
+    _fechaController.text =
+        _normalizeDateText((safeDraft['fecha'] ?? '').toString());
+    _actividadController.text =
+        (safeDraft['actividad'] ?? '').toString().trim();
+    _aplicacionesController.text =
+        (safeDraft['aplicaciones'] ?? '').toString().trim();
+    _dosisController.text = (safeDraft['dosis'] ?? '').toString().trim();
     _observacionesController.text =
-        (safeDraft['observaciones_responsable'] ?? '').toString();
+        (safeDraft['observaciones_responsable'] ?? '').toString().trim();
 
     setState(() {
       _hasDraft = true;
       _messages.add(
         _ChatMessage.system(
-          'Listo. Revise el borrador y guardelo si esta correcto.',
+          'Listo. Revisa el borrador y guárdalo si está correcto.',
         ),
       );
       _isProcessing = false;
@@ -344,14 +365,35 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
   }
 
   Future<void> _saveDraft() async {
-    if (_actividadController.text.trim().isEmpty ||
-        _fechaController.text.trim().isEmpty) {
+    final formattedDate = _normalizeDateText(_fechaController.text.trim());
+
+    if (!_isCurrentYearDate(formattedDate)) {
       _showSnackBar(
-        'Completa al menos la fecha y la actividad.',
+        'La fecha debe tener formato YYYY-MM-DD y ser del año actual.',
         AppColors.danger,
       );
       return;
     }
+
+    if (_actividadController.text.trim().isEmpty ||
+        _aplicacionesController.text.trim().isEmpty) {
+      _showSnackBar(
+        'Completa fecha, actividad y aplicaciones.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    if (_doseIsRequiredForActivity(_actividadController.text.trim()) &&
+        _dosisController.text.trim().isEmpty) {
+      _showSnackBar(
+        'Esta actividad requiere dosis para guardarse.',
+        AppColors.danger,
+      );
+      return;
+    }
+
+    _fechaController.text = formattedDate;
 
     FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
@@ -359,7 +401,7 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
     try {
       await ActividadCampoService.create({
         'id_lote': widget.lotId,
-        'fecha': _fechaController.text.trim(),
+        'fecha': formattedDate,
         'actividad': _actividadController.text.trim(),
         'aplicaciones': _aplicacionesController.text.trim(),
         'dosis': _dosisController.text.trim(),
@@ -376,12 +418,70 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
       if (!mounted) {
         return;
       }
-      _showSnackBar('No se pudo guardar la actividad: $error', AppColors.danger);
+      _showSnackBar(
+          'No se pudo guardar la actividad: $error', AppColors.danger);
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  void _applySuggestion(String suggestion) {
+    _messageController.text = suggestion;
+    _messageController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _messageController.text.length),
+    );
+  }
+
+  bool _doseIsRequiredForActivity(String activity) {
+    final normalized = activity.toLowerCase();
+    return _doseRequiredKeywords.any(normalized.contains);
+  }
+
+  String _normalizeDateText(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    final isoMatch = RegExp(r'\b\d{4}-\d{2}-\d{2}\b').firstMatch(trimmed);
+    if (isoMatch != null) {
+      return isoMatch.group(0) ?? '';
+    }
+
+    final slashMatch =
+        RegExp(r'\b(\d{4})/(\d{2})/(\d{2})\b').firstMatch(trimmed);
+    if (slashMatch != null) {
+      return '${slashMatch.group(1)}-${slashMatch.group(2)}-${slashMatch.group(3)}';
+    }
+
+    return trimmed;
+  }
+
+  bool _isCurrentYearDate(String value) {
+    final normalized = _normalizeDateText(value);
+    final parts = normalized.split('-');
+    if (parts.length != 3) {
+      return false;
+    }
+
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) {
+      return false;
+    }
+
+    if (year != DateTime.now().year) {
+      return false;
+    }
+
+    final parsed = DateTime.tryParse(normalized);
+    return parsed != null &&
+        parsed.year == year &&
+        parsed.month == month &&
+        parsed.day == day;
   }
 
   void _scrollToBottom() {
@@ -406,96 +506,182 @@ class _ActivityAiChatScreenState extends State<ActivityAiChatScreen> {
     );
   }
 
+  Future<bool> _confirmExitIfNeeded() async {
+    if (!_hasDraft) {
+      return true;
+    }
+
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('¿Estás seguro de salir?'),
+          content: const Text(
+            'Si sales ahora, se borrará el borrador generado por la IA y tendrás que volver a llenar la información.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Seguir aquí'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.clayStrong,
+                foregroundColor: AppColors.surface,
+              ),
+              child: const Text('Salir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return shouldLeave ?? false;
+  }
+
+  Future<void> _handleExit() async {
+    final shouldLeave = await _confirmExitIfNeeded();
+    if (!mounted || !shouldLeave) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
     final isBlocked = _isDownloading || _isPreparing || _errorText != null;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text('Chat IA - ${widget.lotName}'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              children: [
-                _CompactHeaderCard(
-                  farmName: widget.farmName,
-                  lotName: widget.lotName,
-                ),
-                const SizedBox(height: 12),
-                const _RequiredDataCard(
-                  title: 'Datos que necesito',
-                  items: [
-                    'Fecha de la actividad',
-                    'Que trabajo se realizo',
-                    'Aplicaciones o productos usados',
-                    'Dosis, si aplica',
-                    'Observaciones o responsable',
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (isBlocked)
-                  _ActivityModelStatusCard(
-                    isDownloading: _isDownloading,
-                    isError: _errorText != null,
-                    progress: _downloadProgress,
-                    status: _errorText ?? _statusText,
-                    onRetry: _errorText == null ? null : _initializeLlm,
-                  )
-                else ...[
-                  if (_messages.isEmpty) const _ActivityIntroCard(),
-                  ..._messages.map((message) => _ChatBubble(message: message)),
-                  if (_hasDraft) ...[
-                    const SizedBox(height: 12),
-                    _AiDraftWrapper(
-                      child: _DraftCard(
-                        fechaController: _fechaController,
-                        actividadController: _actividadController,
-                        aplicacionesController: _aplicacionesController,
-                        dosisController: _dosisController,
-                        observacionesController: _observacionesController,
-                        onSave: _isSaving ? null : _saveDraft,
-                        isSaving: _isSaving,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        await _handleExit();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        backgroundColor: AppColors.background,
+        appBar: buildCultivaSecondaryAppBar(
+          context: context,
+          title: 'Chat IA',
+          leading: IconButton(
+            onPressed: _handleExit,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: [
+                  _CompactHeaderCard(
+                    farmName: widget.farmName,
+                    lotName: widget.lotName,
+                  ),
+                  const SizedBox(height: 12),
+                  const _RequiredDataCard(
+                    title: 'Datos que necesito',
+                    items: [
+                      'Fecha de la actividad',
+                      'Qué trabajo se realizó',
+                      'Aplicaciones o productos usados',
+                      'Dosis, si aplica',
+                      'Observaciones o responsable',
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (isBlocked)
+                    _ActivityModelStatusCard(
+                      isDownloading: _isDownloading,
+                      isError: _errorText != null,
+                      progress: _downloadProgress,
+                      status: _errorText ?? _statusText,
+                      onRetry: _errorText == null ? null : _initializeLlm,
+                    )
+                  else ...[
+                    if (_messages.isEmpty)
+                      _SuggestionCard(
+                        suggestions: _quickSuggestions,
+                        onSelected: _applySuggestion,
                       ),
+                    ..._messages
+                        .map((message) => _ChatBubble(message: message)),
+                    if (_hasDraft) ...[
+                      const SizedBox(height: 12),
+                      _AiDraftWrapper(
+                        child: _DraftCard(
+                          fechaController: _fechaController,
+                          actividadController: _actividadController,
+                          aplicacionesController: _aplicacionesController,
+                          dosisController: _dosisController,
+                          observacionesController: _observacionesController,
+                          onSave: _isSaving ? null : _saveDraft,
+                          isSaving: _isSaving,
+                        ),
+                      ),
+                    ],
+                  ],
+                  SizedBox(
+                    height: viewInsets > 0 ? 12 : 88 + bottomSafeArea,
+                  ),
+                ],
+              ),
+            ),
+            if (!isBlocked)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  0,
+                  12,
+                  viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_messages.isNotEmpty) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _quickSuggestions
+                                .map(
+                                  (suggestion) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _SuggestionChip(
+                                      label: suggestion,
+                                      onTap: () => _applySuggestion(suggestion),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    _ComposerCard(
+                      controller: _messageController,
+                      isListening: _isListening,
+                      isProcessing: _isProcessing,
+                      onListen: _listen,
+                      onSend: _sendMessage,
                     ),
                   ],
-                ],
-                SizedBox(
-                  height: viewInsets > 0 ? 12 : 88 + bottomSafeArea,
                 ),
-              ],
-            ),
-          ),
-          if (!isBlocked)
-            AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.fromLTRB(
-                12,
-                0,
-                12,
-                viewInsets > 0 ? viewInsets + 8 : bottomSafeArea + 12,
               ),
-              child: _ComposerCard(
-                controller: _messageController,
-                isListening: _isListening,
-                isProcessing: _isProcessing,
-                onListen: _listen,
-                onSend: _sendMessage,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -632,9 +818,8 @@ class _ComposerCard extends StatelessWidget {
                 ),
                 icon: Icon(
                   isListening ? Icons.mic : Icons.mic_none,
-                  color: isListening
-                      ? AppColors.danger
-                      : AppColors.textSecondary,
+                  color:
+                      isListening ? AppColors.danger : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(width: 6),
@@ -661,8 +846,14 @@ class _ComposerCard extends StatelessWidget {
   }
 }
 
-class _ActivityIntroCard extends StatelessWidget {
-  const _ActivityIntroCard();
+class _SuggestionCard extends StatelessWidget {
+  const _SuggestionCard({
+    required this.suggestions,
+    required this.onSelected,
+  });
+
+  final List<String> suggestions;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -674,28 +865,75 @@ class _ActivityIntroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.sand),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Ejemplos rapidos',
+          const Text(
+            'Sugerencias rápidas',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
               fontSize: 15,
             ),
           ),
-          SizedBox(height: 10),
-          Text(
-            'Hoy hice plateo manual en la manana y aplique 2 litros de caldo mineral, responsable Juan.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Ayer hubo poda sanitaria, sin aplicaciones, observacion: faltan herramientas.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: suggestions
+                  .map(
+                    (suggestion) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _SuggestionChip(
+                        label: suggestion,
+                        onTap: () => onSelected(suggestion),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSoft,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.sand),
+          ),
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
       ),
     );
   }

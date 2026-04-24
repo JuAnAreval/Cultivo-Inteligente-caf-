@@ -36,7 +36,7 @@ class _PendingSyncScreenState extends State<PendingSyncScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Pendientes de sincronizacion'),
+        title: const Text('Pendientes de sincronización'),
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -116,8 +116,8 @@ class _PendingSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = total == 0
-        ? 'La cola local esta limpia.'
-        : 'Aqui puedes revisar que registro sigue pendiente y si el backend devolvio algun error.';
+        ? 'La cola local está limpia.'
+        : 'Aquí puedes revisar qué registro sigue pendiente y si el backend devolvió algún error.';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -228,7 +228,7 @@ class _PendingItemCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      title.isEmpty ? 'Registro sin titulo' : title,
+                      title.isEmpty ? 'Registro sin título' : title,
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 18,
@@ -296,7 +296,7 @@ class _PendingItemCard extends StatelessWidget {
             ),
             child: Text(
               lastError.isEmpty
-                  ? 'Sin error registrado. Puede estar esperando otra relacion o una nueva pasada de sincronizacion.'
+                  ? 'Sin error registrado. Puede estar esperando otra relación o una nueva pasada de sincronización.'
                   : lastError,
               style: TextStyle(
                 color: lastError.isEmpty
@@ -410,7 +410,7 @@ class _EmptyPendingCard extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Todo lo local ya quedo sincronizado o no hay cambios en cola.',
+            'Todo lo local ya quedó sincronizado o no hay cambios en cola.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.textSecondary,

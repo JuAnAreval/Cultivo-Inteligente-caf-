@@ -45,7 +45,7 @@ class ActividadCampoService {
   static Future<Map<String, dynamic>> create(Map<String, dynamic> data) async {
     final loteLocalId = toInt(data['id_lote']);
     if (loteLocalId == null) {
-      throw Exception('El lote asociado no es valido.');
+      throw Exception('El lote asociado no es válido.');
     }
 
     final lote = await DatabaseHelper().getLoteByLocalId(loteLocalId);
@@ -87,7 +87,7 @@ class ActividadCampoService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de actividad invalido.');
+      throw Exception('Id de actividad inválido.');
     }
 
     final existing = await DatabaseHelper().getActividadByLocalId(localId);
@@ -124,7 +124,7 @@ class ActividadCampoService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de actividad invalido.');
+      throw Exception('Id de actividad inválido.');
     }
 
     final existing = await DatabaseHelper().getActividadByLocalId(localId);

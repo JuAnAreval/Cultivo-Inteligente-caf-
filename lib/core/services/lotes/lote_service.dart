@@ -38,7 +38,7 @@ class LoteService {
   static Future<Map<String, dynamic>> create(Map<String, dynamic> lote) async {
     final fincaLocalId = toInt(lote['id_finca']);
     if (fincaLocalId == null) {
-      throw Exception('La finca asociada no es valida.');
+      throw Exception('La finca asociada no es válida.');
     }
 
     final finca = await DatabaseHelper().getFincaByLocalId(fincaLocalId);
@@ -79,7 +79,7 @@ class LoteService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote invalido.');
+      throw Exception('Id de lote inválido.');
     }
 
     final existing = await DatabaseHelper().getLoteByLocalId(localId);
@@ -115,7 +115,7 @@ class LoteService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote invalido.');
+      throw Exception('Id de lote inválido.');
     }
 
     final existing = await DatabaseHelper().getLoteByLocalId(localId);

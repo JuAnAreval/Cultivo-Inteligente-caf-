@@ -214,7 +214,7 @@ class SyncService {
         debugPrint('$stackTrace');
       }
       await PendingSyncService.refreshPendingCount();
-      // El flujo offline debe seguir funcionando aunque la sincronizacion falle.
+      // El flujo offline debe seguir funcionando aunque la sincronización falle.
     }
   }
 
@@ -263,7 +263,7 @@ class SyncService {
     }
 
     if (error is ApiRequestException && error.statusCode == 401) {
-      return 'El servidor rechazo la sesion para sincronizar. Tus datos siguen guardados localmente.';
+      return 'El servidor rechazó la sesión para sincronizar. Tus datos siguen guardados localmente.';
     }
 
     return null;

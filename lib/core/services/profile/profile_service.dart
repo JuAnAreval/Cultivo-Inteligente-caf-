@@ -26,6 +26,60 @@ class ProfileService {
     }
   }
 
+  static Future<Map<String, dynamic>> updateProfile({
+    required String displayName,
+    required String email,
+    required String phone,
+    required String address,
+    required String identification,
+    required String socialMedia,
+  }) async {
+    final userId = SessionService.userId;
+    if (userId == null) {
+      throw Exception('No hay un usuario activo para actualizar el perfil.');
+    }
+
+    final nameParts = _splitName(displayName);
+    final response = await HttpClient.put(
+      ApiConfig.updateCompleteUserUrl(userId.toString()),
+      {
+        'user': {
+          'firstName': nameParts.$1,
+          'lastName': nameParts.$2,
+          'email': email.trim(),
+        },
+        'userProfile': {
+          'phone': phone.trim(),
+          'address': address.trim(),
+          'identification': identification.trim(),
+          'socialMedia': socialMedia.trim(),
+        },
+      },
+    );
+
+    final record = _findProfileRecord(response, userId) ??
+        (response['data'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(response['data'] as Map<String, dynamic>)
+            : response);
+
+    final merged = _mergeProfile(_buildFallbackProfile(), record);
+    final token = SessionService.token;
+    if (token != null && token.trim().isNotEmpty) {
+      await SessionService.saveSession(
+        token: token,
+        refreshToken: SessionService.refreshToken,
+        tokenExpires: SessionService.tokenExpires,
+        userId: SessionService.userId,
+        userName: merged['displayName']?.toString(),
+        userEmail: merged['email']?.toString(),
+        roleName: merged['roleName']?.toString(),
+        companyName: merged['companyName']?.toString(),
+      );
+    }
+
+    return merged;
+  }
+
   static Map<String, dynamic> _buildFallbackProfile() {
     final name = SessionService.userName?.trim();
     final company = SessionService.companyName?.trim();
@@ -173,6 +227,21 @@ class ProfileService {
       }
     }
     return null;
+  }
+
+  static (String, String) _splitName(String displayName) {
+    final clean = displayName.trim();
+    if (clean.isEmpty) {
+      return ('', '');
+    }
+
+    final parts =
+        clean.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    if (parts.length == 1) {
+      return (parts.first, '');
+    }
+
+    return (parts.first, parts.skip(1).join(' '));
   }
 
   static String _extractPhotoId(Map<String, dynamic> user) {

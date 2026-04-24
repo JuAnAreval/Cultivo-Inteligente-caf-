@@ -43,7 +43,7 @@ class CosechaAiService {
     if (!_looksLikeHarvestRecord(normalizedCommand)) {
       return {
         'error':
-            'No detecte un registro de cosecha valido. Describe recoleccion, kilos de cereza o pergamino, o el proceso.',
+            'No detecté un registro de cosecha válido. Describe recolección, kilos de cereza o pergamino, o el proceso.',
       };
     }
 
@@ -57,14 +57,14 @@ Analiza SOLO registros de cosecha de la finca "$farmName".
 
 REGLAS ESTRICTAS:
 1. Responde EXCLUSIVAMENTE JSON puro.
-2. Si el texto no describe una cosecha valida, responde exactamente:
-{"error":"No se detecto un registro de cosecha valido."}
+2. Si el texto no describe una cosecha válida, responde exactamente:
+{"error":"No se detectó un registro de cosecha válido."}
 3. "fecha": formato YYYY-MM-DD. Si falta, usa "$today".
-4. "kilos_cereza": numero sin unidad. Si no hay, "".
-5. "kilos_pergamino": numero sin unidad. Si no hay, "".
+4. "kilos_cereza": número sin unidad. Si no hay, "".
+5. "kilos_pergamino": número sin unidad. Si no hay, "".
 6. "proceso": solo "MIEL", "NATURAL" o "LAVADO". Si no se menciona, "".
 7. "anio": anio numerico. Si no se menciona, usa "$currentYear".
-8. NO inventes informacion.
+8. NO inventes información.
 9. NO expliques nada fuera del JSON.
 
 Formato obligatorio:
@@ -91,7 +91,7 @@ Formato obligatorio:
     if (result.containsKey('error')) {
       return {
         'error':
-            (result['error'] ?? 'No se detecto una cosecha valida.').toString(),
+            (result['error'] ?? 'No se detectó una cosecha válida.').toString(),
       };
     }
 
@@ -103,7 +103,7 @@ Formato obligatorio:
           ) ??
           {
             'error':
-                'Ese mensaje no parece un registro de cosecha valido para guardar.',
+                'Ese mensaje no parece un registro de cosecha válido para guardar.',
           };
     }
 

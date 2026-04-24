@@ -29,7 +29,7 @@ class AuthService {
         body: jsonEncode({
           'email': email,
           'password': password,
-          'domain': 'https://asprounion.datorural.com',
+          'domain': ApiConfig.authDomain,
         }),
       );
 
@@ -79,8 +79,8 @@ class AuthService {
       return {
         'success': false,
         'message': _isNoConnectionError(error)
-            ? 'En este momento no tienes conexion.'
-            : 'No fue posible iniciar sesion.',
+            ? 'En este momento no tienes conexión.'
+            : 'No fue posible iniciar sesión.',
       };
     }
   }
@@ -96,6 +96,48 @@ class AuthService {
 
     final refreshed = await refreshSession(force: true);
     return refreshed != null;
+  }
+
+  static Future<Map<String, dynamic>> forgotPassword(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.forgotPassword),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'domain': ApiConfig.authDomain,
+        }),
+      );
+
+      final data = response.body.trim().isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return {
+          'success': true,
+          'message': data['message']?.toString() ??
+              'Si el correo existe, recibirás instrucciones para cambiar tu contraseña.',
+          'data': data,
+        };
+      }
+
+      return {
+        'success': false,
+        'message': data['message']?.toString() ??
+            'No fue posible enviar el correo de recuperación.',
+        'data': data,
+      };
+    } catch (error) {
+      return {
+        'success': false,
+        'message': _isNoConnectionError(error)
+            ? 'En este momento no tienes conexión.'
+            : 'No fue posible enviar la recuperación de contraseña.',
+      };
+    }
   }
 
   static Future<void> restoreSessionOnLaunch() async {
@@ -161,7 +203,7 @@ class AuthService {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (response.statusCode == 401) {
           await _invalidateSession(
-              'El backend rechazo el refresh token actual.');
+              'El backend rechazó el refresh token actual.');
         }
         _registerRefreshFailure(
           _extractFailureMessage(data, response.statusCode),
@@ -172,7 +214,7 @@ class AuthService {
 
       final newToken = extractToken(data);
       if (newToken == null || newToken.trim().isEmpty) {
-        _registerRefreshFailure('El refresh respondio sin token nuevo.');
+        _registerRefreshFailure('El refresh respondió sin token nuevo.');
         return null;
       }
 
@@ -203,8 +245,8 @@ class AuthService {
     } catch (error) {
       _registerRefreshFailure(
         _isNoConnectionError(error)
-            ? 'En este momento no tienes conexion.'
-            : 'No se pudo renovar la sesion: $error',
+            ? 'En este momento no tienes conexión.'
+            : 'No se pudo renovar la sesión: $error',
         useCooldown: !_isNoConnectionError(error),
       );
       return null;

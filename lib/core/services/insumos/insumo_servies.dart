@@ -41,7 +41,7 @@ class InsumoService {
   static Future<Map<String, dynamic>> create(Map<String, dynamic> data) async {
     final loteLocalId = toInt(data['id_lote']);
     if (loteLocalId == null) {
-      throw Exception('El lote asociado no es valido.');
+      throw Exception('El lote asociado no es válido.');
     }
 
     final lote = await DatabaseHelper().getLoteByLocalId(loteLocalId);
@@ -83,7 +83,7 @@ class InsumoService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de insumo invalido.');
+      throw Exception('Id de insumo inválido.');
     }
 
     final existing = await DatabaseHelper().getInsumoByLocalId(localId);
@@ -120,7 +120,7 @@ class InsumoService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de insumo invalido.');
+      throw Exception('Id de insumo inválido.');
     }
 
     final existing = await DatabaseHelper().getInsumoByLocalId(localId);

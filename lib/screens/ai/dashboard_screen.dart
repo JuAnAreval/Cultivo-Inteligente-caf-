@@ -276,7 +276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
-                          'Todavia no hay tareas registradas. Cuando la IA este lista, puedes empezar a capturar actividades del campo.',
+                          'Todavía no hay tareas registradas. Cuando la IA esté lista, puedes empezar a capturar actividades del campo.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.textSecondary,
@@ -346,7 +346,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         isDownloading: false,
         isError: true,
         progress: 0,
-        status: 'La IA local aun no esta disponible.',
+        status: 'La IA local aún no está disponible.',
         onRetry: _initializeLlm,
       );
     }

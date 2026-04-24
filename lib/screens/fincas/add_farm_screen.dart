@@ -206,6 +206,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -217,7 +219,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.fromLTRB(18, 18, 18, bottomSafeArea + 36),
         child: Form(
           key: _formKey,
           child: Column(
@@ -244,7 +246,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Selecciona la ubicacion directamente en el mapa. La latitud y la longitud se llenan automaticamente al tocar el punto.',
+                      'Selecciona la ubicación directamente en el mapa. La latitud y la longitud se llenan automáticamente al tocar el punto.',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         height: 1.5,
@@ -272,13 +274,13 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     const SizedBox(height: 16),
                     _FarmTextField(
                       controller: _ubicacionController,
-                      label: 'Ubicacion texto',
+                      label: 'Ubicación',
                       hint: 'Ej: Vereda La Esperanza, Neiva',
                       icon: Icons.place_rounded,
                       maxLines: 2,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Ingresa una ubicacion';
+                          return 'Ingresa una ubicación';
                         }
                         return null;
                       },
@@ -305,8 +307,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                             : const Icon(Icons.my_location_rounded),
                         label: Text(
                           _isLocating
-                              ? 'Buscando ubicacion...'
-                              : 'Usar ubicacion actual',
+                              ? 'Buscando ubicación...'
+                              : 'Usar ubicación actual',
                         ),
                       ),
                     ),
@@ -346,7 +348,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     const SizedBox(height: 16),
                     _FarmTextField(
                       controller: _areaController,
-                      label: 'Area en hectareas',
+                      label: 'Área en hectáreas',
                       hint: 'Ej: 12.5',
                       icon: Icons.crop_landscape_rounded,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -409,7 +411,11 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
     final parsed = double.tryParse(value.trim().replaceAll(',', '.'));
     if (parsed == null) {
-      return 'Ingresa un numero valido';
+      return 'Ingresa un número válido';
+    }
+
+    if (parsed < 0) {
+      return 'El valor no puede ser negativo';
     }
 
     return null;
@@ -465,7 +471,7 @@ class _MapPickerCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Seleccion en mapa',
+          'Selección en mapa',
           style: TextStyle(
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -545,7 +551,7 @@ class _MapPickerCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Text(
-                      'Toca el mapa o usa tu ubicacion actual para seleccionar el punto.',
+                      'Toca el mapa o usa tu ubicación actual para seleccionar el punto.',
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600,
@@ -676,8 +682,8 @@ class _PreviewCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _PreviewRow(label: 'Nombre', value: nombre),
-          _PreviewRow(label: 'Ubicacion', value: ubicacion),
-          _PreviewRow(label: 'Area en hectareas', value: area),
+          _PreviewRow(label: 'Ubicación', value: ubicacion),
+          _PreviewRow(label: 'Área en hectáreas', value: area),
         ],
       ),
     );
@@ -716,7 +722,7 @@ class _LocationStatusCard extends StatelessWidget {
           Expanded(
             child: Text(
               hasSelectedPoint
-                  ? 'Ubicacion seleccionada en el mapa'
+                  ? 'Ubicación seleccionada en el mapa'
                   : 'Selecciona un punto en el mapa para guardar la finca',
               style: const TextStyle(
                 color: AppColors.textPrimary,

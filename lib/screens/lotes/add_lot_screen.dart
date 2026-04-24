@@ -130,6 +130,8 @@ class _AddLotScreenState extends State<AddLotScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -141,7 +143,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.fromLTRB(18, 18, 18, bottomSafeArea + 36),
         child: Form(
           key: _formKey,
           child: Column(
@@ -153,7 +155,7 @@ class _AddLotScreenState extends State<AddLotScreen> {
                   children: [
                     Text(
                       widget.existingLot == null ? 'Nuevo lote' : 'Editar lote',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
@@ -304,6 +306,10 @@ class _AddLotScreenState extends State<AddLotScreen> {
     final parsed = double.tryParse(value.trim().replaceAll(',', '.'));
     if (parsed == null) {
       return 'Ingresa un número válido';
+    }
+
+    if (parsed < 0) {
+      return 'El valor no puede ser negativo';
     }
 
     return null;
