@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -14,6 +16,9 @@ class DatabaseHelper {
   static const String pendingUpdate = 'pending_update';
   static const String pendingDelete = 'pending_delete';
   static const String synced = 'synced';
+  static const String _databaseFileName = 'cultiva_tec.db';
+  static const String _legacyDatabaseFileName = 'tasks_ai.db';
+
   Future<Database> get database async {
     if (_database != null) {
       return _database!;
@@ -24,7 +29,7 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDb() async {
-    final path = join(await getDatabasesPath(), 'tasks_ai.db');
+    final path = await _resolveDatabasePath();
 
     return openDatabase(
       path,
@@ -52,6 +57,71 @@ class DatabaseHelper {
         }
       },
     );
+  }
+
+  Future<String> _resolveDatabasePath() async {
+    final databasesDirectory = await getDatabasesPath();
+    final currentPath = join(databasesDirectory, _databaseFileName);
+    final legacyPath = join(databasesDirectory, _legacyDatabaseFileName);
+
+    if (await File(currentPath).exists()) {
+      return currentPath;
+    }
+
+    final copiedLegacy = await _copyLegacyDatabaseIfNeeded(
+      legacyPath: legacyPath,
+      currentPath: currentPath,
+    );
+
+    if (copiedLegacy && await File(currentPath).exists()) {
+      return currentPath;
+    }
+
+    if (await File(legacyPath).exists()) {
+      return legacyPath;
+    }
+
+    return currentPath;
+  }
+
+  Future<bool> _copyLegacyDatabaseIfNeeded({
+    required String legacyPath,
+    required String currentPath,
+  }) async {
+    final legacyMainFile = File(legacyPath);
+    if (!await legacyMainFile.exists()) {
+      return false;
+    }
+
+    final createdTargets = <File>[];
+    const suffixes = ['', '-wal', '-shm', '-journal'];
+
+    try {
+      for (final suffix in suffixes) {
+        final source = File('$legacyPath$suffix');
+        if (!await source.exists()) {
+          continue;
+        }
+
+        final target = File('$currentPath$suffix');
+        if (await target.exists()) {
+          continue;
+        }
+
+        await target.parent.create(recursive: true);
+        await source.copy(target.path);
+        createdTargets.add(target);
+      }
+
+      return true;
+    } catch (_) {
+      for (final target in createdTargets.reversed) {
+        if (await target.exists()) {
+          await target.delete();
+        }
+      }
+      return false;
+    }
   }
 
   Future<void> _safeAddColumn(
