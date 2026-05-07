@@ -1,5 +1,7 @@
 import 'package:app_flutter_ai/core/config/api_config.dart';
+import 'package:app_flutter_ai/core/services/actividades/actividad_campo_service.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/insumos/insumo_servies.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
 import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
@@ -119,7 +121,7 @@ class LoteService {
       return {'success': true};
     }
 
-    await _ensureCanDelete(localId);
+    await _cascadeDeleteChildren(localId);
 
     if (existing['remote_id'] == null) {
       await DatabaseHelper().deleteLocalLote(localId);
@@ -137,30 +139,20 @@ class LoteService {
     return {'success': true, 'source': 'local'};
   }
 
-  static Future<void> _ensureCanDelete(int localId) async {
+  static Future<void> _cascadeDeleteChildren(int localId) async {
     final database = DatabaseHelper();
     final actividades = await database.getVisibleActividadesByLote(localId);
+    for (final actividad in actividades) {
+      final actividadLocalId =
+          (actividad['local_id'] as num).toInt().toString();
+      await ActividadCampoService.delete(actividadLocalId);
+    }
+
     final insumos = await database.getVisibleInsumosByLote(localId);
-
-    if (actividades.isEmpty && insumos.isEmpty) {
-      return;
+    for (final insumo in insumos) {
+      final insumoLocalId = (insumo['local_id'] as num).toInt().toString();
+      await InsumoService.delete(insumoLocalId);
     }
-
-    final parts = <String>[];
-    if (actividades.isNotEmpty) {
-      parts.add(
-        '${actividades.length} ${actividades.length == 1 ? 'actividad asociada' : 'actividades asociadas'}',
-      );
-    }
-    if (insumos.isNotEmpty) {
-      parts.add(
-        '${insumos.length} ${insumos.length == 1 ? 'insumo asociado' : 'insumos asociados'}',
-      );
-    }
-
-    throw Exception(
-      'No puedes eliminar este lote porque todavia tiene ${parts.join(' y ')}. Elimina primero esos registros.',
-    );
   }
 
   static Future<Map<String, dynamic>> fetchRemote({

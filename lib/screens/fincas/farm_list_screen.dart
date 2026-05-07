@@ -109,7 +109,7 @@ class _FarmListScreenState extends State<FarmListScreen> {
         return AlertDialog(
           title: const Text('Eliminar finca'),
           content: Text(
-            'Vas a eliminar "$farmName". Esta accion tambien puede afectar el trabajo relacionado con esta finca.',
+            'Vas a eliminar "$farmName" junto con sus lotes, actividades, insumos y cosechas relacionadas.',
           ),
           actions: [
             TextButton(
@@ -141,7 +141,9 @@ class _FarmListScreenState extends State<FarmListScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Finca "$farmName" eliminada correctamente.'),
+          content: Text(
+            'Finca "$farmName" eliminada junto con sus registros relacionados.',
+          ),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),

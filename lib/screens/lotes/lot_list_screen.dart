@@ -99,7 +99,7 @@ class _LotListScreenState extends State<LotListScreen> {
         return AlertDialog(
           title: const Text('Eliminar lote'),
           content: Text(
-            'Vas a eliminar "$lotName". Esta accion puede afectar los registros relacionados con este lote.',
+            'Vas a eliminar "$lotName" junto con sus actividades e insumos relacionados.',
           ),
           actions: [
             TextButton(
@@ -131,7 +131,9 @@ class _LotListScreenState extends State<LotListScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lote "$lotName" eliminado correctamente.'),
+          content: Text(
+            'Lote "$lotName" eliminado junto con sus registros relacionados.',
+          ),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),

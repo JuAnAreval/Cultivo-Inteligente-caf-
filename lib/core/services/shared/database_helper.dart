@@ -435,6 +435,18 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getAllLotesByFinca(
+    int fincaLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'lotes_local',
+      where: 'finca_local_id = ?',
+      whereArgs: [fincaLocalId],
+      orderBy: 'updated_at DESC',
+    );
+  }
+
   Future<Map<String, dynamic>?> getLoteByLocalId(int localId) async {
     final db = await database;
     final rows = await db.query(
@@ -576,6 +588,18 @@ class DatabaseHelper {
     return db.query(
       'actividades_campo_local',
       where: 'deleted = 0 AND lote_local_id = ?',
+      whereArgs: [loteLocalId],
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllActividadesByLote(
+    int loteLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'actividades_campo_local',
+      where: 'lote_local_id = ?',
       whereArgs: [loteLocalId],
       orderBy: 'fecha DESC, updated_at DESC',
     );
@@ -723,6 +747,18 @@ class DatabaseHelper {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getAllInsumosByLote(
+    int loteLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'insumos_local',
+      where: 'lote_local_id = ?',
+      whereArgs: [loteLocalId],
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
   Future<Map<String, dynamic>?> getInsumoByLocalId(int localId) async {
     final db = await database;
     final rows = await db.query(
@@ -862,6 +898,18 @@ class DatabaseHelper {
     return db.query(
       'cosechas_local',
       where: 'deleted = 0 AND finca_local_id = ?',
+      whereArgs: [fincaLocalId],
+      orderBy: 'fecha DESC, updated_at DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllCosechasByFinca(
+    int fincaLocalId,
+  ) async {
+    final db = await database;
+    return db.query(
+      'cosechas_local',
+      where: 'finca_local_id = ?',
       whereArgs: [fincaLocalId],
       orderBy: 'fecha DESC, updated_at DESC',
     );

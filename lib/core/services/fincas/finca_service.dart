@@ -1,5 +1,7 @@
 import 'package:app_flutter_ai/core/config/api_config.dart';
 import 'package:app_flutter_ai/core/services/auth/session_service.dart';
+import 'package:app_flutter_ai/core/services/cosechas/cosecha_service.dart';
+import 'package:app_flutter_ai/core/services/lotes/lote_service.dart';
 import 'package:app_flutter_ai/core/services/shared/database_helper.dart';
 import 'package:app_flutter_ai/core/services/shared/http_client.dart';
 import 'package:app_flutter_ai/core/services/shared/pending_sync_service.dart';
@@ -126,7 +128,7 @@ class FincaService {
       return {'success': true};
     }
 
-    await _ensureCanDelete(localId);
+    await _cascadeDeleteChildren(localId);
 
     if (existing['remote_id'] == null) {
       await DatabaseHelper().deleteLocalFinca(localId);
@@ -144,30 +146,19 @@ class FincaService {
     return {'success': true, 'source': 'local'};
   }
 
-  static Future<void> _ensureCanDelete(int localId) async {
+  static Future<void> _cascadeDeleteChildren(int localId) async {
     final database = DatabaseHelper();
     final lotes = await database.getVisibleLotesByFinca(localId);
+    for (final lote in lotes) {
+      final loteLocalId = (lote['local_id'] as num).toInt().toString();
+      await LoteService.delete(loteLocalId);
+    }
+
     final cosechas = await database.getVisibleCosechasByFinca(localId);
-
-    if (lotes.isEmpty && cosechas.isEmpty) {
-      return;
+    for (final cosecha in cosechas) {
+      final cosechaLocalId = (cosecha['local_id'] as num).toInt().toString();
+      await CosechaService.delete(cosechaLocalId);
     }
-
-    final parts = <String>[];
-    if (lotes.isNotEmpty) {
-      parts.add(
-        '${lotes.length} ${lotes.length == 1 ? 'lote asociado' : 'lotes asociados'}',
-      );
-    }
-    if (cosechas.isNotEmpty) {
-      parts.add(
-        '${cosechas.length} ${cosechas.length == 1 ? 'cosecha asociada' : 'cosechas asociadas'}',
-      );
-    }
-
-    throw Exception(
-      'No puedes eliminar esta finca porque todavia tiene ${parts.join(' y ')}. Elimina primero esos registros.',
-    );
   }
 
   static Future<Map<String, dynamic>> fetchRemote({
