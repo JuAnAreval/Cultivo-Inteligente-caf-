@@ -301,6 +301,9 @@ class SyncService {
 
           if (relatedLotes.isNotEmpty || relatedCosechas.isNotEmpty) {
             await database.updateLocalFinca(localId, {
+              'deleted': 0,
+              'sync_status': DatabaseHelper.synced,
+              'updated_at': DateTime.now().toIso8601String(),
               'last_error': _buildFincaDeleteDependencyMessage(
                 lotCount: relatedLotes.length,
                 cosechaCount: relatedCosechas.length,
@@ -351,15 +354,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalFinca(localId, {
-          'last_error': status == DatabaseHelper.pendingDelete &&
-                  error is ApiRequestException
-              ? _buildDeleteRejectedMessage(
-                  entityName: 'finca',
-                  error: error,
-                )
-              : error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalFinca(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'finca',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalFinca(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -395,6 +406,9 @@ class SyncService {
 
           if (relatedActividades.isNotEmpty || relatedInsumos.isNotEmpty) {
             await database.updateLocalLote(localId, {
+              'deleted': 0,
+              'sync_status': DatabaseHelper.synced,
+              'updated_at': DateTime.now().toIso8601String(),
               'last_error': _buildLoteDeleteDependencyMessage(
                 actividadCount: relatedActividades.length,
                 insumoCount: relatedInsumos.length,
@@ -474,15 +488,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalLote(localId, {
-          'last_error': status == DatabaseHelper.pendingDelete &&
-                  error is ApiRequestException
-              ? _buildDeleteRejectedMessage(
-                  entityName: 'lote',
-                  error: error,
-                )
-              : error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalLote(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'lote',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalLote(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -584,9 +606,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalActividad(localId, {
-          'last_error': error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalActividad(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'actividad',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalActividad(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -686,9 +722,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalInsumo(localId, {
-          'last_error': error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalInsumo(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'insumo',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalInsumo(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -789,9 +839,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalCosecha(localId, {
-          'last_error': error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalCosecha(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'cosecha',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalCosecha(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -933,7 +997,7 @@ class SyncService {
         '$cosechaCount ${cosechaCount == 1 ? 'cosecha asociada' : 'cosechas asociadas'}',
       );
     }
-    return 'Esperando eliminar ${parts.join(' y ')} antes de borrar la finca.';
+    return 'La finca no se puede eliminar porque todavía tiene ${parts.join(' y ')}.';
   }
 
   static String _buildLoteDeleteDependencyMessage({
@@ -951,7 +1015,7 @@ class SyncService {
         '$insumoCount ${insumoCount == 1 ? 'insumo asociado' : 'insumos asociados'}',
       );
     }
-    return 'Esperando eliminar ${parts.join(' y ')} antes de borrar el lote.';
+    return 'El lote no se puede eliminar porque todavía tiene ${parts.join(' y ')}.';
   }
 
   static String _buildDeleteRejectedMessage({
