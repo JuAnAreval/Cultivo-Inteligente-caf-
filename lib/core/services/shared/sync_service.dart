@@ -131,11 +131,17 @@ class SyncService {
     for (var round = 0; round < maxRounds; round++) {
       _log('ROUND', 'push pendientes ${round + 1}/$maxRounds');
 
-      await _pushPendingFincas();
-      await _pushPendingLotes();
-      await _pushPendingActividades();
-      await _pushPendingInsumos();
-      await _pushPendingCosechas();
+      await _pushPendingFincas(skipDeletes: true);
+      await _pushPendingLotes(skipDeletes: true);
+      await _pushPendingActividades(skipDeletes: true);
+      await _pushPendingInsumos(skipDeletes: true);
+      await _pushPendingCosechas(skipDeletes: true);
+
+      await _pushPendingActividades(deletesOnly: true);
+      await _pushPendingInsumos(deletesOnly: true);
+      await _pushPendingCosechas(deletesOnly: true);
+      await _pushPendingLotes(deletesOnly: true);
+      await _pushPendingFincas(deletesOnly: true);
 
       final currentCount = await database.getPendingChangesCount();
       _log('PENDING', 'antes: $previousCount, despues: $currentCount');
@@ -269,7 +275,10 @@ class SyncService {
     return null;
   }
 
-  static Future<void> _pushPendingFincas() async {
+  static Future<void> _pushPendingFincas({
+    bool deletesOnly = false,
+    bool skipDeletes = false,
+  }) async {
     final database = DatabaseHelper();
     final pending = await database.getPendingFincas();
 
@@ -278,8 +287,32 @@ class SyncService {
       final remoteId = finca['remote_id']?.toString();
       final status = finca['sync_status']?.toString() ?? DatabaseHelper.synced;
 
+      if (deletesOnly && status != DatabaseHelper.pendingDelete) {
+        continue;
+      }
+      if (skipDeletes && status == DatabaseHelper.pendingDelete) {
+        continue;
+      }
+
       try {
         if (status == DatabaseHelper.pendingDelete) {
+          final relatedLotes = await database.getVisibleLotesByFinca(localId);
+          final relatedCosechas =
+              await database.getVisibleCosechasByFinca(localId);
+
+          if (relatedLotes.isNotEmpty || relatedCosechas.isNotEmpty) {
+            await database.updateLocalFinca(localId, {
+              'deleted': 0,
+              'sync_status': DatabaseHelper.synced,
+              'updated_at': DateTime.now().toIso8601String(),
+              'last_error': _buildFincaDeleteDependencyMessage(
+                lotCount: relatedLotes.length,
+                cosechaCount: relatedCosechas.length,
+              ),
+            });
+            continue;
+          }
+
           if (remoteId != null && remoteId.isNotEmpty) {
             await FincaService.deleteRemote(remoteId);
           }
@@ -322,9 +355,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalFinca(localId, {
-          'last_error': error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalFinca(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'finca',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalFinca(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -332,7 +379,10 @@ class SyncService {
     }
   }
 
-  static Future<void> _pushPendingLotes() async {
+  static Future<void> _pushPendingLotes({
+    bool deletesOnly = false,
+    bool skipDeletes = false,
+  }) async {
     final database = DatabaseHelper();
     final pending = await database.getPendingLotes();
 
@@ -341,8 +391,33 @@ class SyncService {
       final remoteId = lote['remote_id']?.toString();
       final status = lote['sync_status']?.toString() ?? DatabaseHelper.synced;
 
+      if (deletesOnly && status != DatabaseHelper.pendingDelete) {
+        continue;
+      }
+      if (skipDeletes && status == DatabaseHelper.pendingDelete) {
+        continue;
+      }
+
       try {
         if (status == DatabaseHelper.pendingDelete) {
+          final relatedActividades =
+              await database.getVisibleActividadesByLote(localId);
+          final relatedInsumos =
+              await database.getVisibleInsumosByLote(localId);
+
+          if (relatedActividades.isNotEmpty || relatedInsumos.isNotEmpty) {
+            await database.updateLocalLote(localId, {
+              'deleted': 0,
+              'sync_status': DatabaseHelper.synced,
+              'updated_at': DateTime.now().toIso8601String(),
+              'last_error': _buildLoteDeleteDependencyMessage(
+                actividadCount: relatedActividades.length,
+                insumoCount: relatedInsumos.length,
+              ),
+            });
+            continue;
+          }
+
           if (remoteId != null && remoteId.isNotEmpty) {
             await LoteService.deleteRemote(remoteId);
           }
@@ -414,9 +489,23 @@ class SyncService {
           });
         }
       } catch (error) {
-        await database.updateLocalLote(localId, {
-          'last_error': error.toString(),
-        });
+        if (status == DatabaseHelper.pendingDelete &&
+            error is ApiRequestException &&
+            error.statusCode != 401) {
+          await database.updateLocalLote(localId, {
+            'deleted': 0,
+            'sync_status': DatabaseHelper.synced,
+            'updated_at': DateTime.now().toIso8601String(),
+            'last_error': _buildDeleteRejectedMessage(
+              entityName: 'lote',
+              error: error,
+            ),
+          });
+        } else {
+          await database.updateLocalLote(localId, {
+            'last_error': error.toString(),
+          });
+        }
         if (_isAuthenticationError(error) || _isConnectionError(error)) {
           rethrow;
         }
@@ -424,7 +513,10 @@ class SyncService {
     }
   }
 
-  static Future<void> _pushPendingActividades() async {
+  static Future<void> _pushPendingActividades({
+    bool deletesOnly = false,
+    bool skipDeletes = false,
+  }) async {
     final database = DatabaseHelper();
     final pending = await database.getPendingActividades();
 
@@ -433,6 +525,13 @@ class SyncService {
       final remoteId = actividad['remote_id']?.toString();
       final status =
           actividad['sync_status']?.toString() ?? DatabaseHelper.synced;
+
+      if (deletesOnly && status != DatabaseHelper.pendingDelete) {
+        continue;
+      }
+      if (skipDeletes && status == DatabaseHelper.pendingDelete) {
+        continue;
+      }
 
       try {
         if (status == DatabaseHelper.pendingDelete) {
@@ -518,7 +617,10 @@ class SyncService {
     }
   }
 
-  static Future<void> _pushPendingInsumos() async {
+  static Future<void> _pushPendingInsumos({
+    bool deletesOnly = false,
+    bool skipDeletes = false,
+  }) async {
     final database = DatabaseHelper();
     final pending = await database.getPendingInsumos();
 
@@ -526,6 +628,13 @@ class SyncService {
       final localId = (insumo['local_id'] as num).toInt();
       final remoteId = insumo['remote_id']?.toString();
       final status = insumo['sync_status']?.toString() ?? DatabaseHelper.synced;
+
+      if (deletesOnly && status != DatabaseHelper.pendingDelete) {
+        continue;
+      }
+      if (skipDeletes && status == DatabaseHelper.pendingDelete) {
+        continue;
+      }
 
       try {
         if (status == DatabaseHelper.pendingDelete) {
@@ -610,7 +719,10 @@ class SyncService {
     }
   }
 
-  static Future<void> _pushPendingCosechas() async {
+  static Future<void> _pushPendingCosechas({
+    bool deletesOnly = false,
+    bool skipDeletes = false,
+  }) async {
     final database = DatabaseHelper();
     final pending = await database.getPendingCosechas();
 
@@ -619,6 +731,13 @@ class SyncService {
       final remoteId = cosecha['remote_id']?.toString();
       final status =
           cosecha['sync_status']?.toString() ?? DatabaseHelper.synced;
+
+      if (deletesOnly && status != DatabaseHelper.pendingDelete) {
+        continue;
+      }
+      if (skipDeletes && status == DatabaseHelper.pendingDelete) {
+        continue;
+      }
 
       try {
         if (status == DatabaseHelper.pendingDelete) {
@@ -821,5 +940,51 @@ class SyncService {
       await database.upsertRemoteCosecha(record);
     }
     await database.removeMissingRemoteCosechas(remoteIds);
+  }
+
+  static String _buildFincaDeleteDependencyMessage({
+    required int lotCount,
+    required int cosechaCount,
+  }) {
+    final parts = <String>[];
+    if (lotCount > 0) {
+      parts.add(
+          '$lotCount ${lotCount == 1 ? 'lote asociado' : 'lotes asociados'}');
+    }
+    if (cosechaCount > 0) {
+      parts.add(
+        '$cosechaCount ${cosechaCount == 1 ? 'cosecha asociada' : 'cosechas asociadas'}',
+      );
+    }
+    return 'La finca no se puede eliminar porque todavia tiene ${parts.join(' y ')}.';
+  }
+
+  static String _buildLoteDeleteDependencyMessage({
+    required int actividadCount,
+    required int insumoCount,
+  }) {
+    final parts = <String>[];
+    if (actividadCount > 0) {
+      parts.add(
+        '$actividadCount ${actividadCount == 1 ? 'actividad asociada' : 'actividades asociadas'}',
+      );
+    }
+    if (insumoCount > 0) {
+      parts.add(
+        '$insumoCount ${insumoCount == 1 ? 'insumo asociado' : 'insumos asociados'}',
+      );
+    }
+    return 'El lote no se puede eliminar porque todavia tiene ${parts.join(' y ')}.';
+  }
+
+  static String _buildDeleteRejectedMessage({
+    required String entityName,
+    required ApiRequestException error,
+  }) {
+    if (error.statusCode >= 500) {
+      return 'El servidor no pudo eliminar esta $entityName. Revisa si todavia tiene registros asociados.';
+    }
+
+    return 'El servidor rechazo la eliminacion de esta $entityName: ${error.message}';
   }
 }

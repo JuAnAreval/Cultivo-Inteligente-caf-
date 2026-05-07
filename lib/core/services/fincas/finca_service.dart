@@ -11,7 +11,8 @@ class FincaService {
     String search = '',
   }) async {
     final currentUserId = SessionService.userId;
-    var fincas = await DatabaseHelper().getVisibleFincas(createdBy: currentUserId);
+    var fincas =
+        await DatabaseHelper().getVisibleFincas(createdBy: currentUserId);
 
     if (search.trim().isNotEmpty) {
       final query = search.trim().toLowerCase();
@@ -23,11 +24,8 @@ class FincaService {
       }).toList();
     }
 
-    final normalized = fincas
-        .skip((page - 1) * limit)
-        .take(limit)
-        .map(_toViewMap)
-        .toList();
+    final normalized =
+        fincas.skip((page - 1) * limit).take(limit).map(_toViewMap).toList();
 
     return {
       'data': normalized,
@@ -84,7 +82,7 @@ class FincaService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca inválido.');
+      throw Exception('Id de finca invalido.');
     }
 
     final existing = await DatabaseHelper().getFincaByLocalId(localId);
@@ -92,10 +90,9 @@ class FincaService {
       throw Exception('No se encontro la finca.');
     }
 
-    final nextStatus =
-        existing['remote_id'] == null
-            ? DatabaseHelper.pendingCreate
-            : DatabaseHelper.pendingUpdate;
+    final nextStatus = existing['remote_id'] == null
+        ? DatabaseHelper.pendingCreate
+        : DatabaseHelper.pendingUpdate;
 
     await DatabaseHelper().updateLocalFinca(localId, {
       'nombre': finca['nombre']?.toString(),
@@ -121,13 +118,15 @@ class FincaService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de finca inválido.');
+      throw Exception('Id de finca invalido.');
     }
 
     final existing = await DatabaseHelper().getFincaByLocalId(localId);
     if (existing == null) {
       return {'success': true};
     }
+
+    await _ensureCanDelete(localId);
 
     if (existing['remote_id'] == null) {
       await DatabaseHelper().deleteLocalFinca(localId);
@@ -136,12 +135,39 @@ class FincaService {
         'deleted': 1,
         'sync_status': DatabaseHelper.pendingDelete,
         'updated_at': DateTime.now().toIso8601String(),
+        'last_error': null,
       });
     }
 
     await PendingSyncService.refreshPendingCount();
 
     return {'success': true, 'source': 'local'};
+  }
+
+  static Future<void> _ensureCanDelete(int localId) async {
+    final database = DatabaseHelper();
+    final lotes = await database.getVisibleLotesByFinca(localId);
+    final cosechas = await database.getVisibleCosechasByFinca(localId);
+
+    if (lotes.isEmpty && cosechas.isEmpty) {
+      return;
+    }
+
+    final parts = <String>[];
+    if (lotes.isNotEmpty) {
+      parts.add(
+        '${lotes.length} ${lotes.length == 1 ? 'lote asociado' : 'lotes asociados'}',
+      );
+    }
+    if (cosechas.isNotEmpty) {
+      parts.add(
+        '${cosechas.length} ${cosechas.length == 1 ? 'cosecha asociada' : 'cosechas asociadas'}',
+      );
+    }
+
+    throw Exception(
+      'No puedes eliminar esta finca porque todavia tiene ${parts.join(' y ')}. Elimina primero esos registros.',
+    );
   }
 
   static Future<Map<String, dynamic>> fetchRemote({

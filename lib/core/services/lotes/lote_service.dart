@@ -21,11 +21,8 @@ class LoteService {
       }).toList();
     }
 
-    final normalized = lotes
-        .skip((page - 1) * limit)
-        .take(limit)
-        .map(_toViewMap)
-        .toList();
+    final normalized =
+        lotes.skip((page - 1) * limit).take(limit).map(_toViewMap).toList();
 
     return {
       'data': normalized,
@@ -38,7 +35,7 @@ class LoteService {
   static Future<Map<String, dynamic>> create(Map<String, dynamic> lote) async {
     final fincaLocalId = toInt(lote['id_finca']);
     if (fincaLocalId == null) {
-      throw Exception('La finca asociada no es válida.');
+      throw Exception('La finca asociada no es valida.');
     }
 
     final finca = await DatabaseHelper().getFincaByLocalId(fincaLocalId);
@@ -79,7 +76,7 @@ class LoteService {
   ) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote inválido.');
+      throw Exception('Id de lote invalido.');
     }
 
     final existing = await DatabaseHelper().getLoteByLocalId(localId);
@@ -87,10 +84,9 @@ class LoteService {
       throw Exception('No se encontro el lote.');
     }
 
-    final nextStatus =
-        existing['remote_id'] == null
-            ? DatabaseHelper.pendingCreate
-            : DatabaseHelper.pendingUpdate;
+    final nextStatus = existing['remote_id'] == null
+        ? DatabaseHelper.pendingCreate
+        : DatabaseHelper.pendingUpdate;
 
     await DatabaseHelper().updateLocalLote(localId, {
       'nombre_lote': lote['nombre_lote']?.toString(),
@@ -115,13 +111,15 @@ class LoteService {
   static Future<Map<String, dynamic>> delete(String id) async {
     final localId = int.tryParse(id);
     if (localId == null) {
-      throw Exception('Id de lote inválido.');
+      throw Exception('Id de lote invalido.');
     }
 
     final existing = await DatabaseHelper().getLoteByLocalId(localId);
     if (existing == null) {
       return {'success': true};
     }
+
+    await _ensureCanDelete(localId);
 
     if (existing['remote_id'] == null) {
       await DatabaseHelper().deleteLocalLote(localId);
@@ -130,12 +128,39 @@ class LoteService {
         'deleted': 1,
         'sync_status': DatabaseHelper.pendingDelete,
         'updated_at': DateTime.now().toIso8601String(),
+        'last_error': null,
       });
     }
 
     await PendingSyncService.refreshPendingCount();
 
     return {'success': true, 'source': 'local'};
+  }
+
+  static Future<void> _ensureCanDelete(int localId) async {
+    final database = DatabaseHelper();
+    final actividades = await database.getVisibleActividadesByLote(localId);
+    final insumos = await database.getVisibleInsumosByLote(localId);
+
+    if (actividades.isEmpty && insumos.isEmpty) {
+      return;
+    }
+
+    final parts = <String>[];
+    if (actividades.isNotEmpty) {
+      parts.add(
+        '${actividades.length} ${actividades.length == 1 ? 'actividad asociada' : 'actividades asociadas'}',
+      );
+    }
+    if (insumos.isNotEmpty) {
+      parts.add(
+        '${insumos.length} ${insumos.length == 1 ? 'insumo asociado' : 'insumos asociados'}',
+      );
+    }
+
+    throw Exception(
+      'No puedes eliminar este lote porque todavia tiene ${parts.join(' y ')}. Elimina primero esos registros.',
+    );
   }
 
   static Future<Map<String, dynamic>> fetchRemote({

@@ -11,18 +11,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _identificationController =
-      TextEditingController();
-  final TextEditingController _socialMediaController = TextEditingController();
-
   Map<String, dynamic> _profile = <String, dynamic>{};
   bool _isLoading = true;
-  bool _isEditing = false;
-  bool _isSaving = false;
 
   @override
   void initState() {
@@ -30,21 +20,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadProfile();
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    _identificationController.dispose();
-    _socialMediaController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadProfile({bool remote = false}) async {
-    if (!_isEditing) {
-      setState(() => _isLoading = true);
-    }
+    setState(() => _isLoading = true);
 
     try {
       final profile = await ProfileService.getProfile(remote: remote);
@@ -56,7 +33,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _profile = profile;
         _isLoading = false;
       });
-      _fillControllers(profile);
     } catch (error) {
       if (!mounted) {
         return;
@@ -69,68 +45,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _fillControllers(Map<String, dynamic> profile) {
-    _nameController.text = (profile['displayName'] ?? '').toString();
-    _emailController.text = (profile['email'] ?? '').toString();
-    _phoneController.text = (profile['phone'] ?? '').toString();
-    _addressController.text = (profile['address'] ?? '').toString();
-    _identificationController.text =
-        (profile['identification'] ?? '').toString();
-    _socialMediaController.text = (profile['socialMedia'] ?? '').toString();
-  }
-
   Future<void> _reload() async {
     await _loadProfile(remote: true);
-  }
-
-  Future<void> _saveProfile() async {
-    final name = _nameController.text.trim();
-    final email = _emailController.text.trim();
-
-    if (name.isEmpty || email.isEmpty) {
-      _showSnackBar(
-        'Nombre y correo son obligatorios para guardar el perfil.',
-        AppColors.clayStrong,
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-    try {
-      final updated = await ProfileService.updateProfile(
-        displayName: name,
-        email: email,
-        phone: _phoneController.text,
-        address: _addressController.text,
-        identification: _identificationController.text,
-        socialMedia: _socialMediaController.text,
-      );
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _profile = updated;
-        _isEditing = false;
-        _isSaving = false;
-      });
-      _fillControllers(updated);
-      _showSnackBar('Perfil actualizado correctamente.', AppColors.success);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _isSaving = false);
-      _showSnackBar(
-        'No fue posible actualizar el perfil: $error',
-        AppColors.danger,
-      );
-    }
-  }
-
-  void _cancelEdit() {
-    setState(() => _isEditing = false);
-    _fillControllers(_profile);
   }
 
   Future<void> _logout() async {
@@ -191,32 +107,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       name: name,
                       role: role,
                       company: company,
-                      isEditing: _isEditing,
-                      onEdit: () {
-                        setState(() => _isEditing = true);
-                      },
                     ),
                     const SizedBox(height: 18),
-                    if (_isEditing)
-                      _EditableProfileCard(
-                        nameController: _nameController,
-                        emailController: _emailController,
-                        phoneController: _phoneController,
-                        addressController: _addressController,
-                        identificationController: _identificationController,
-                        socialMediaController: _socialMediaController,
-                        isSaving: _isSaving,
-                        onCancel: _cancelEdit,
-                        onSave: _saveProfile,
-                      )
-                    else
-                      _ProfileOverviewCard(
-                        email: email,
-                        phone: phone,
-                        address: address,
-                        identification: identification,
-                        socialMedia: socialMedia,
-                      ),
+                    _ProfileOverviewCard(
+                      email: email,
+                      phone: phone,
+                      address: address,
+                      identification: identification,
+                      socialMedia: socialMedia,
+                    ),
                     const SizedBox(height: 18),
                     _ProfileActionsCard(
                       onLogout: _logout,
@@ -234,15 +133,11 @@ class _ProfileHeroCard extends StatelessWidget {
     required this.name,
     required this.role,
     required this.company,
-    required this.isEditing,
-    required this.onEdit,
   });
 
   final String name;
   final String role;
   final String company;
-  final bool isEditing;
-  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -302,170 +197,23 @@ class _ProfileHeroCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundSoft,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Text(
-                    isEditing ? 'Editando perfil' : 'Perfil de Cultiva Tec',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              if (!isEditing) ...[
-                const SizedBox(width: 10),
-                FilledButton.icon(
-                  onPressed: onEdit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.clayStrong,
-                    foregroundColor: AppColors.surface,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                  icon: const Icon(Icons.edit_rounded),
-                  label: const Text('Editar'),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EditableProfileCard extends StatelessWidget {
-  const _EditableProfileCard({
-    required this.nameController,
-    required this.emailController,
-    required this.phoneController,
-    required this.addressController,
-    required this.identificationController,
-    required this.socialMediaController,
-    required this.isSaving,
-    required this.onCancel,
-    required this.onSave,
-  });
-
-  final TextEditingController nameController;
-  final TextEditingController emailController;
-  final TextEditingController phoneController;
-  final TextEditingController addressController;
-  final TextEditingController identificationController;
-  final TextEditingController socialMediaController;
-  final bool isSaving;
-  final VoidCallback onCancel;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.sand),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Editar información',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
             ),
-          ),
-          const SizedBox(height: 16),
-          _ProfileField(
-            controller: nameController,
-            label: 'Nombre completo',
-            icon: Icons.person_outline_rounded,
-          ),
-          const SizedBox(height: 14),
-          _ProfileField(
-            controller: emailController,
-            label: 'Correo',
-            icon: Icons.mail_outline_rounded,
-            keyboardType: TextInputType.emailAddress,
-          ),
-          const SizedBox(height: 14),
-          _ProfileField(
-            controller: phoneController,
-            label: 'Teléfono',
-            icon: Icons.call_outlined,
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: 14),
-          _ProfileField(
-            controller: addressController,
-            label: 'Dirección',
-            icon: Icons.location_on_outlined,
-            maxLines: 2,
-          ),
-          const SizedBox(height: 14),
-          _ProfileField(
-            controller: identificationController,
-            label: 'Identificación',
-            icon: Icons.badge_outlined,
-          ),
-          const SizedBox(height: 14),
-          _ProfileField(
-            controller: socialMediaController,
-            label: 'Red social o enlace',
-            icon: Icons.public_rounded,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: isSaving ? null : onCancel,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.soil,
-                    side: const BorderSide(color: AppColors.sand),
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  child: const Text('Cancelar'),
-                ),
+            decoration: BoxDecoration(
+              color: AppColors.backgroundSoft,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Text(
+              'Perfil visual de Cultiva Tec',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: isSaving ? null : onSave,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.moss,
-                    foregroundColor: AppColors.surface,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  icon: isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.surface,
-                          ),
-                        )
-                      : const Icon(Icons.save_rounded),
-                  label: Text(isSaving ? 'Guardando...' : 'Guardar cambios'),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -501,7 +249,7 @@ class _ProfileOverviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Información personal',
+            'Informacion basica',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -516,17 +264,17 @@ class _ProfileOverviewCard extends StatelessWidget {
           ),
           _InfoRow(
             icon: Icons.call_outlined,
-            label: 'Teléfono',
+            label: 'Telefono',
             value: phone.isEmpty ? 'No registrado' : phone,
           ),
           _InfoRow(
             icon: Icons.location_on_outlined,
-            label: 'Dirección',
+            label: 'Direccion',
             value: address.isEmpty ? 'No registrada' : address,
           ),
           _InfoRow(
             icon: Icons.badge_outlined,
-            label: 'Identificación',
+            label: 'Identificacion',
             value: identification.isEmpty ? 'No registrada' : identification,
           ),
           _InfoRow(
@@ -556,22 +304,18 @@ class _ProfileActionsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppColors.sand),
       ),
-      child: Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onLogout,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.soil,
-                side: const BorderSide(color: AppColors.sand),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Cerrar sesión'),
-            ),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onLogout,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.soil,
+            side: const BorderSide(color: AppColors.sand),
+            padding: const EdgeInsets.symmetric(vertical: 16),
           ),
-        ],
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text('Cerrar sesion'),
+        ),
       ),
     );
   }
@@ -615,53 +359,6 @@ class _ProfileAvatar extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ProfileField extends StatelessWidget {
-  const _ProfileField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType,
-    this.maxLines = 1,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final int maxLines;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          maxLines: maxLines,
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: AppColors.textSecondary),
-            filled: true,
-            fillColor: AppColors.backgroundSoft,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
